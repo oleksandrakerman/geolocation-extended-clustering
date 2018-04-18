@@ -210,7 +210,7 @@ index a318c32..d02854f 100644
 +
 +                    $items.each(function () {
 +                      var this_width = $(this).width();
-+                      var this_height = $(this).width();
++                      var this_height = $(this).height();
 +
 +                      width = this_width > width ? this_width : width;
 +                      // Overflow-hidden wrapper width.
