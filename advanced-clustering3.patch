@@ -11,7 +11,8 @@ index 01258f2..aa02f50 100644
 +  overflow: hidden;
 +}
 +
-+.geolocation-info-ul {
++ul.geolocation-info-ul {
++  margin-bottom: 20px;
 +  position: relative;
 +  padding: 0;
 +  left: 0;
