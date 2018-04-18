@@ -1,0 +1,330 @@
+diff --git a/css/geolocation-common-map.css b/css/geolocation-common-map.css
+index 01258f2..aa02f50 100644
+--- a/css/geolocation-common-map.css
++++ b/css/geolocation-common-map.css
+@@ -14,3 +14,20 @@
+   box-shadow: 0 2px 2px rgba(0,0,0,0.2);
+   font-family: Arial, sans-serif;
+ }
++
++.geolocation-info-contrainer {
++  overflow: hidden;
++}
++
++.geolocation-info-ul {
++  position: relative;
++  padding: 0;
++  left: 0;
++  top: 0;
++  transition: left .5s;
++  -webkit-transition: left .5s;
++}
++
++.geolocation-info-ul li {
++  vertical-align: top;
++}
+diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
+index a318c32..d02854f 100644
+--- a/js/geolocation-common-map.js
++++ b/js/geolocation-common-map.js
+@@ -496,14 +496,247 @@
+             markerClustererStyles = commonMapSettings.markerClusterer.styles;
+           }
+ 
++          // Check if advanced clustering is enabled.
++          var advanced = false;
++          if (commonMapSettings.markerClusterer.advanced) {
++            advanced = commonMapSettings.markerClusterer.advanced;
++          }
++
+           geolocationMap.markerClusterer = new MarkerClusterer(
+             geolocationMap.googleMap,
+             geolocationMap.mapMarkers,
+             {
++              zoomOnClick: !advanced,
+               imagePath: imagePath,
+-              styles: markerClustererStyles
++              styles: [markerClustererStyles]
+             }
+           );
++
++          // Advanced clustering.
++          if (advanced) {
++            geolocationMap.markerClusterer.setCalculator(function (markers, numStyles) {
++              var index = 0, count = markers.length, dv = count, result = {};
++              while (dv > 0) {
++                dv = parseInt(dv - 5, 10);
++                index++;
++              }
++
++              index = Math.min(index, numStyles);
++
++              var custom_id = markers[0].position.lat() + '|' + markers[0].position.lng();
++
++              result = {
++                text: count + ' <span data-cluster-id="' + custom_id + '"><span/>',
++                index: index
++              };
++
++              return result;
++            });
++
++            // Bind click on cluster marker.
++            google.maps.event.addListener(geolocationMap.markerClusterer, 'clusterclick', function (cluster) {
++              // If "Icon source field" for markers is configured -
++              // adjust marker of cluster upon opening the cluster infoWindow
++              // and using pagination inside this infoWindows.
++              var geolocationAdjustClusterIcon = function (cluster, marker_id) {
++                if (cluster.markers_ === undefined) {
++                  // In case if map was zoomed after cluster
++                  // infoWindow was opened.
++                  return false;
++                }
++
++                var custom_id = cluster.markers_[0].position.lat()
++                  + '|' + cluster.markers_[0].position.lng();
++                var marker_img = '';
++
++                if (marker_id !== undefined) {
++                  marker_id = marker_id ? marker_id : 0;
++                  marker_img = cluster.markers_[marker_id].icon;
++                }
++                else {
++                  marker_img = cluster.clusterIcon_.url_;
++                }
++
++                if (marker_img) {
++                  // Set new cluster marker icon.
++                  $('span[data-cluster-id="' + custom_id + '"]')
++                    .parent().closest('div')
++                    .css('transition', 'background-image .5s')
++                    .css('-webkit-transition', 'background-image .5s')
++                    .css('background-image', 'url("' + marker_img + '")');
++                }
++              };
++
++              // Revert to default all clusters icons before opening new one.
++              $.each(geolocationMap.markerClusterer.clusters_, function (i, v) {
++                geolocationAdjustClusterIcon(v);
++              });
++
++              // Changed opened cluster icon.
++              geolocationAdjustClusterIcon(cluster, 0);
++
++              var markers = cluster.markers_;
++              var markers_count = markers.length;
++              // After click on cluster marker map will be zoomed
++              // (if markers count is >= zoom_at)
++              // or infoWindow will be opend
++              // (if markers count is < zoom_at).
++              var zoom_at = 100;
++
++              if (markers_count) {
++                if (markers_count >= zoom_at) {
++                  geolocationMap.googleMap.fitBounds(cluster.getBounds());
++                }
++                else {
++                  // Get first marker in the cluster.
++                  var firstMarker = markers[0];
++
++                  if (firstMarker) {
++                    var $wrapper = $('<div/>');
++
++                    var $container = $('<div/>')
++                      .addClass('geolocation-info-contrainer')
++                      .appendTo($wrapper);
++
++                    var $ul = $('<ul/>')
++                      .addClass('geolocation-info-ul')
++                      .appendTo($container);
++
++                    $.each(markers, function (index, marker) {
++                      $('<li/>')
++                        .addClass('geolocation-info-li')
++                        .addClass(index == 0 ? 'geolocation-info-li-active' : '')
++                        .attr('data-geolocation-index', index + 1)
++                        .html(marker.infoWindowContent)
++                        .appendTo($ul);
++                    });
++
++                    // Pager counter and controls.
++                    var $pager = $('<div/>')
++                      .addClass('geolocation-pager')
++                      .appendTo($container);
++
++                    $('<a/>')
++                      .addClass('geolocation-pager-prev')
++                      .text('<')
++                      .attr('href', '#')
++                      .appendTo($pager);
++
++                    $('<span/>').addClass('geolocation-pager-first')
++                      .text('1')
++                      .appendTo($pager);
++
++                    $('<span/>').addClass('geolocation-pager-divider')
++                      .text('/')
++                      .appendTo($pager);
++
++                    $('<span/>').addClass('geolocation-pager-total')
++                      .text(markers_count)
++                      .appendTo($pager);
++
++                    $('<a/>')
++                      .addClass('geolocation-pager-next')
++                      .text('>')
++                      .attr('href', '#')
++                      .appendTo($pager);
++
++                    var infoWindow = new google.maps.InfoWindow({
++                      content: $wrapper.html()
++                    });
++
++                    // Revert cluster icon after popup closed.
++                    google.maps.event.addListener(infoWindow, "closeclick", function () {
++                      geolocationAdjustClusterIcon(cluster);
++                    });
++
++                    // Info widnow position same as first item in the cluster.
++                    infoWindow.setPosition({
++                      lat: cluster.center_.lat(),
++                      lng: cluster.center_.lng()
++                    });
++
++                    // Close all info windows.
++                    if (firstMarker.infoWindowSolitary) {
++                      if (typeof geolocationMap.googleMap.infoWindow !== 'undefined') {
++                        geolocationMap.googleMap.infoWindow.close();
++                      }
++                      geolocationMap.googleMap.infoWindow = infoWindow;
++                    }
++
++                    // Open info window.
++                    infoWindow.open(geolocationMap.googleMap);
++
++                    // Adjust items and wrapper size.
++                    var width = 0;
++                    var total_width = 0;
++                    var height = 0;
++                    var $items = $('.geolocation-info-ul li');
++
++                    $items.each(function () {
++                      var this_width = $(this).width();
++                      var this_height = $(this).width();
++
++                      width = this_width > width ? this_width : width;
++                      // Overflow-hidden wrapper width.
++                      $('.geolocation-info-contrainer').width(width);
++                      height = this_height > height ? this_height : height;
++
++                      total_width = parseFloat(total_width) + parseFloat(width);
++                    });
++
++                    // Overflow-hidden wrapper width.
++                    $('.geolocation-info-contrainer').width(width);
++
++                    // Pager items size.
++                    $items.width(width).height(height)
++                      .css('display', 'inline-block');
++
++                    // Ul size.
++                    $('.geolocation-info-ul')
++                      .width(total_width)
++                      .height(height);
++
++                    // Pagination function.
++                    var geolocationPagination = function (direction) {
++                      var $active_item = $('li.geolocation-info-li-active');
++                      var active = $active_item.attr('data-geolocation-index');
++                      active = parseInt(active);
++
++                      var total = $('.geolocation-pager-total').text();
++                      total = parseInt(total);
++
++                      if (direction == 'next' ? active < total : active > 1) {
++                        var next = direction == 'next' ? active + 1 : active - 1;
++
++                        $active_item.removeClass('geolocation-info-li-active');
++
++                        $('li[data-geolocation-index="' + next + '"]')
++                          .addClass('geolocation-info-li-active');
++
++                        $('.geolocation-pager-first').text(next);
++
++                        var left_skip = (next - 1) * width;
++                        $('.geolocation-info-ul').css('left', -left_skip);
++
++                        // Change the cluster icon.
++                        geolocationAdjustClusterIcon(cluster, next - 1);
++                      }
++                    };
++
++                    $('.geolocation-pager-next').click(function (e) {
++                      e.preventDefault();
++                      geolocationPagination('next');
++                    });
++
++                    $('.geolocation-pager-prev').click(function (e) {
++                      e.preventDefault();
++                      geolocationPagination('prev');
++                    });
++                  }
++                }
++              }
++            });
++          }
+         }
+ 
+         if (mapWrapper.data('fitbounds') === 1) {
+diff --git a/src/Plugin/views/style/CommonMap.php b/src/Plugin/views/style/CommonMap.php
+index 893742a..2e1487f 100644
+--- a/src/Plugin/views/style/CommonMap.php
++++ b/src/Plugin/views/style/CommonMap.php
+@@ -163,6 +163,7 @@ class CommonMap extends StylePluginBase {
+       $build['#attached']['library'][] = 'geolocation/geolocation.markerclusterer';
+       $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer'] = [];
+       $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['enable'] = TRUE;
++      $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['advanced'] = $this->options['marker_clusterer_advanced'];
+       $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['imagePath'] = $this->options['marker_clusterer_image_path'];
+       if (!empty($this->options['marker_clusterer_styles'])) {
+         $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['styles'] = json_decode($this->options['marker_clusterer_styles']);
+@@ -455,6 +456,7 @@ class CommonMap extends StylePluginBase {
+     $options['marker_row_number'] = ['default' => FALSE];
+     $options['id_field'] = ['default' => ''];
+     $options['marker_clusterer'] = ['default' => 0];
++    $options['marker_clusterer_advanced'] = ['default' => FALSE];
+     $options['marker_clusterer_image_path'] = ['default' => ''];
+     $options['marker_clusterer_styles'] = ['default' => []];
+     $options['dynamic_map'] = [
+@@ -823,6 +825,17 @@ class CommonMap extends StylePluginBase {
+       '#description' => $this->t('Various <a href=":url">examples</a> are available.', [':url' => 'https://developers.google.com/maps/documentation/javascript/marker-clustering']),
+       '#default_value' => $this->options['marker_clusterer'],
+     ];
++    $form['marker_clusterer_advanced'] = [
++      '#group' => 'style_options][marker_clusterer_settings',
++      '#title' => $this->t('Enable advanced clustering'),
++      '#type' => 'checkbox',
++      '#default_value' => $this->options['marker_clusterer_advanced'],
++      '#states' => [
++        'visible' => [
++          ':input[name="style_options[marker_clusterer]"]' => ['checked' => TRUE],
++        ],
++      ],
++    ];
+     $form['marker_clusterer_image_path'] = [
+       '#group' => 'style_options][marker_clusterer_settings',
+       '#title' => $this->t('Cluster image path'),
+@@ -877,9 +890,10 @@ class CommonMap extends StylePluginBase {
+       if ($json_result === NULL) {
+         $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoding style JSON failed. Error: %error.', ['%error' => json_last_error()]));
+       }
+-      elseif (!is_array($json_result)) {
+-        $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoded style JSON is not an array.'));
+-      }
++      // Commented json_decode without second param returns object.
++//      elseif (!is_array($json_result)) {
++//        $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoded style JSON is not an array.'));
++//      }
+     }
+ 
+     $this->validateGoogleMapsSettingsForm($form, $form_state, 'style_options');
