@@ -1,0 +1,1054 @@
+diff --git a/config/schema/geolocation.schema.yml b/config/schema/geolocation.schema.yml
+index 199b9a0..8a8c2e2 100644
+--- a/config/schema/geolocation.schema.yml
++++ b/config/schema/geolocation.schema.yml
+@@ -409,5 +409,5 @@ field.value.geolocation:
+       type: text
+       label: 'Support value'
+     data:
+-      type: sequence
++      type: text
+       label: 'Catchall'
+diff --git a/css/geolocation-common-map.css b/css/geolocation-common-map.css
+index bbb4768..aa02f50 100644
+--- a/css/geolocation-common-map.css
++++ b/css/geolocation-common-map.css
+@@ -4,10 +4,6 @@
+   display: none;
+ }
+ 
+-.geolocation-common-map-locations {
+-  display: none;
+-}
+-
+ .geolocation-context-popup {
+   z-index: 1;
+   position: absolute;
+@@ -18,3 +14,20 @@
+   box-shadow: 0 2px 2px rgba(0,0,0,0.2);
+   font-family: Arial, sans-serif;
+ }
++
++.geolocation-info-contrainer {
++  overflow: hidden;
++}
++
++.geolocation-info-ul {
++  position: relative;
++  padding: 0;
++  left: 0;
++  top: 0;
++  transition: left .5s;
++  -webkit-transition: left .5s;
++}
++
++.geolocation-info-ul li {
++  vertical-align: top;
++}
+diff --git a/css/geolocation-widget-html5.css b/css/geolocation-widget-html5.css
+index c0b20f6..9572674 100644
+--- a/css/geolocation-widget-html5.css
++++ b/css/geolocation-widget-html5.css
+@@ -1,8 +1,3 @@
+-/**
+- * @file
+- * CSS for Google Map widget of Geolocation field.
+- */
+-
+ .geolocation-html5-button {
+   padding: 0 0.75em 0 3.5em;
+   position: relative;
+diff --git a/geolocation.libraries.yml b/geolocation.libraries.yml
+index ca41a92..7aa847c 100644
+--- a/geolocation.libraries.yml
++++ b/geolocation.libraries.yml
+@@ -114,4 +114,4 @@ geolocation.google_map_form_element:
+   js:
+     js/geolocation-google-map-form-element.js: {}
+   dependencies:
+-    - geolocation/geolocation.googlemapsapi
++    - geolocation/geolocation.googlemapsapi
+\ No newline at end of file
+diff --git a/geolocation.module b/geolocation.module
+index 20c7fce..8e98a79 100644
+--- a/geolocation.module
++++ b/geolocation.module
+@@ -7,7 +7,6 @@
+ 
+ use Drupal\Core\Routing\RouteMatchInterface;
+ use Drupal\Core\Url;
+-use Drupal\views\ViewExecutable;
+ 
+ /**
+  * Implements hook_help().
+diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
+index 390da36..d02854f 100644
+--- a/js/geolocation-common-map.js
++++ b/js/geolocation-common-map.js
+@@ -113,15 +113,13 @@
+           return;
+         }
+ 
+-
+-        // If the display is configured to show the raw locations, we
+-        // can now show the graceful-fallback HTML list. The list is
+-        // hidden on page load so that in the default case where the
+-        // raw locations are hidden, we don't see them 'flicker' as JS loads.
+-        if (typeof commonMapSettings.showRawLocations !== 'undefined') {
+-          if (commonMapSettings.showRawLocations) {
+-            mapWrapper.find('.geolocation-common-map-locations').show();
+-          }
++        // Hide the graceful-fallback HTML list; map will propably work now.
++        // Map-container is not hidden by default in case of graceful-fallback.
++        if (typeof commonMapSettings.showRawLocations === 'undefined') {
++          mapWrapper.find('.geolocation-common-map-locations').hide();
++        }
++        else if (!commonMapSettings.showRawLocations) {
++          mapWrapper.find('.geolocation-common-map-locations').hide();
+         }
+ 
+         /**
+@@ -370,7 +368,7 @@
+           var markerConfig = {
+             position: position,
+             map: geolocationMap.googleMap,
+-            title: location.children('.location-title').text().trim(),
++            title: location.children('.location-title').html(),
+             infoWindowContent: location.html(),
+             infoWindowSolitary: true
+           };
+@@ -498,14 +496,247 @@
+             markerClustererStyles = commonMapSettings.markerClusterer.styles;
+           }
+ 
++          // Check if advanced clustering is enabled.
++          var advanced = false;
++          if (commonMapSettings.markerClusterer.advanced) {
++            advanced = commonMapSettings.markerClusterer.advanced;
++          }
++
+           geolocationMap.markerClusterer = new MarkerClusterer(
+             geolocationMap.googleMap,
+             geolocationMap.mapMarkers,
+             {
++              zoomOnClick: !advanced,
+               imagePath: imagePath,
+-              styles: markerClustererStyles
++              styles: [markerClustererStyles]
+             }
+           );
++
++          // Advanced clustering.
++          if (advanced) {
++            geolocationMap.markerClusterer.setCalculator(function (markers, numStyles) {
++              var index = 0, count = markers.length, dv = count, result = {};
++              while (dv > 0) {
++                dv = parseInt(dv - 5, 10);
++                index++;
++              }
++
++              index = Math.min(index, numStyles);
++
++              var custom_id = markers[0].position.lat() + '|' + markers[0].position.lng();
++
++              result = {
++                text: count + ' <span data-cluster-id="' + custom_id + '"><span/>',
++                index: index
++              };
++
++              return result;
++            });
++
++            // Bind click on cluster marker.
++            google.maps.event.addListener(geolocationMap.markerClusterer, 'clusterclick', function (cluster) {
++              // If "Icon source field" for markers is configured -
++              // adjust marker of cluster upon opening the cluster infoWindow
++              // and using pagination inside this infoWindows.
++              var geolocationAdjustClusterIcon = function (cluster, marker_id) {
++                if (cluster.markers_ === undefined) {
++                  // In case if map was zoomed after cluster
++                  // infoWindow was opened.
++                  return false;
++                }
++
++                var custom_id = cluster.markers_[0].position.lat()
++                  + '|' + cluster.markers_[0].position.lng();
++                var marker_img = '';
++
++                if (marker_id !== undefined) {
++                  marker_id = marker_id ? marker_id : 0;
++                  marker_img = cluster.markers_[marker_id].icon;
++                }
++                else {
++                  marker_img = cluster.clusterIcon_.url_;
++                }
++
++                if (marker_img) {
++                  // Set new cluster marker icon.
++                  $('span[data-cluster-id="' + custom_id + '"]')
++                    .parent().closest('div')
++                    .css('transition', 'background-image .5s')
++                    .css('-webkit-transition', 'background-image .5s')
++                    .css('background-image', 'url("' + marker_img + '")');
++                }
++              };
++
++              // Revert to default all clusters icons before opening new one.
++              $.each(geolocationMap.markerClusterer.clusters_, function (i, v) {
++                geolocationAdjustClusterIcon(v);
++              });
++
++              // Changed opened cluster icon.
++              geolocationAdjustClusterIcon(cluster, 0);
++
++              var markers = cluster.markers_;
++              var markers_count = markers.length;
++              // After click on cluster marker map will be zoomed
++              // (if markers count is >= zoom_at)
++              // or infoWindow will be opend
++              // (if markers count is < zoom_at).
++              var zoom_at = 100;
++
++              if (markers_count) {
++                if (markers_count >= zoom_at) {
++                  geolocationMap.googleMap.fitBounds(cluster.getBounds());
++                }
++                else {
++                  // Get first marker in the cluster.
++                  var firstMarker = markers[0];
++
++                  if (firstMarker) {
++                    var $wrapper = $('<div/>');
++
++                    var $container = $('<div/>')
++                      .addClass('geolocation-info-contrainer')
++                      .appendTo($wrapper);
++
++                    var $ul = $('<ul/>')
++                      .addClass('geolocation-info-ul')
++                      .appendTo($container);
++
++                    $.each(markers, function (index, marker) {
++                      $('<li/>')
++                        .addClass('geolocation-info-li')
++                        .addClass(index == 0 ? 'geolocation-info-li-active' : '')
++                        .attr('data-geolocation-index', index + 1)
++                        .html(marker.infoWindowContent)
++                        .appendTo($ul);
++                    });
++
++                    // Pager counter and controls.
++                    var $pager = $('<div/>')
++                      .addClass('geolocation-pager')
++                      .appendTo($container);
++
++                    $('<a/>')
++                      .addClass('geolocation-pager-prev')
++                      .text('<')
++                      .attr('href', '#')
++                      .appendTo($pager);
++
++                    $('<span/>').addClass('geolocation-pager-first')
++                      .text('1')
++                      .appendTo($pager);
++
++                    $('<span/>').addClass('geolocation-pager-divider')
++                      .text('/')
++                      .appendTo($pager);
++
++                    $('<span/>').addClass('geolocation-pager-total')
++                      .text(markers_count)
++                      .appendTo($pager);
++
++                    $('<a/>')
++                      .addClass('geolocation-pager-next')
++                      .text('>')
++                      .attr('href', '#')
++                      .appendTo($pager);
++
++                    var infoWindow = new google.maps.InfoWindow({
++                      content: $wrapper.html()
++                    });
++
++                    // Revert cluster icon after popup closed.
++                    google.maps.event.addListener(infoWindow, "closeclick", function () {
++                      geolocationAdjustClusterIcon(cluster);
++                    });
++
++                    // Info widnow position same as first item in the cluster.
++                    infoWindow.setPosition({
++                      lat: cluster.center_.lat(),
++                      lng: cluster.center_.lng()
++                    });
++
++                    // Close all info windows.
++                    if (firstMarker.infoWindowSolitary) {
++                      if (typeof geolocationMap.googleMap.infoWindow !== 'undefined') {
++                        geolocationMap.googleMap.infoWindow.close();
++                      }
++                      geolocationMap.googleMap.infoWindow = infoWindow;
++                    }
++
++                    // Open info window.
++                    infoWindow.open(geolocationMap.googleMap);
++
++                    // Adjust items and wrapper size.
++                    var width = 0;
++                    var total_width = 0;
++                    var height = 0;
++                    var $items = $('.geolocation-info-ul li');
++
++                    $items.each(function () {
++                      var this_width = $(this).width();
++                      var this_height = $(this).width();
++
++                      width = this_width > width ? this_width : width;
++                      // Overflow-hidden wrapper width.
++                      $('.geolocation-info-contrainer').width(width);
++                      height = this_height > height ? this_height : height;
++
++                      total_width = parseFloat(total_width) + parseFloat(width);
++                    });
++
++                    // Overflow-hidden wrapper width.
++                    $('.geolocation-info-contrainer').width(width);
++
++                    // Pager items size.
++                    $items.width(width).height(height)
++                      .css('display', 'inline-block');
++
++                    // Ul size.
++                    $('.geolocation-info-ul')
++                      .width(total_width)
++                      .height(height);
++
++                    // Pagination function.
++                    var geolocationPagination = function (direction) {
++                      var $active_item = $('li.geolocation-info-li-active');
++                      var active = $active_item.attr('data-geolocation-index');
++                      active = parseInt(active);
++
++                      var total = $('.geolocation-pager-total').text();
++                      total = parseInt(total);
++
++                      if (direction == 'next' ? active < total : active > 1) {
++                        var next = direction == 'next' ? active + 1 : active - 1;
++
++                        $active_item.removeClass('geolocation-info-li-active');
++
++                        $('li[data-geolocation-index="' + next + '"]')
++                          .addClass('geolocation-info-li-active');
++
++                        $('.geolocation-pager-first').text(next);
++
++                        var left_skip = (next - 1) * width;
++                        $('.geolocation-info-ul').css('left', -left_skip);
++
++                        // Change the cluster icon.
++                        geolocationAdjustClusterIcon(cluster, next - 1);
++                      }
++                    };
++
++                    $('.geolocation-pager-next').click(function (e) {
++                      e.preventDefault();
++                      geolocationPagination('next');
++                    });
++
++                    $('.geolocation-pager-prev').click(function (e) {
++                      e.preventDefault();
++                      geolocationPagination('prev');
++                    });
++                  }
++                }
++              }
++            });
++          }
+         }
+ 
+         if (mapWrapper.data('fitbounds') === 1) {
+diff --git a/js/geolocation-geocoder.js b/js/geolocation-geocoder.js
+index cfa20e7..5530fd5 100644
+--- a/js/geolocation-geocoder.js
++++ b/js/geolocation-geocoder.js
+@@ -21,7 +21,6 @@
+   Drupal.geolocation = Drupal.geolocation || {};
+   Drupal.geolocation.geocoder = Drupal.geolocation.geocoder || {};
+ 
+-  drupalSettings.geolocation = drupalSettings.geolocation || {};
+   drupalSettings.geolocation.geocoder = drupalSettings.geolocation.geocoder || {};
+ 
+   /**
+diff --git a/js/geolocation-google-maps-api.js b/js/geolocation-google-maps-api.js
+index 2a3b48f..69e0be4 100644
+--- a/js/geolocation-google-maps-api.js
++++ b/js/geolocation-google-maps-api.js
+@@ -433,9 +433,6 @@
+    * @param {GeolocationMap} map - The settings object that contains all of the necessary metadata for this map.
+    */
+   Drupal.geolocation.removeMapMarker = function (map) {
+-    if (typeof map.markerClusterer !== "undefined" && typeof map.markerClusterer.clearMarkers === "function") {
+-      map.markerClusterer.clearMarkers();
+-    }
+     map.mapMarkers = map.mapMarkers || [];
+ 
+     $.each(
+diff --git a/modules/geolocation_demo/config/optional/field.field.node.geolocation_default_article.field_geolocation_demo_single.yml b/modules/geolocation_demo/config/optional/field.field.node.geolocation_default_article.field_geolocation_demo_single.yml
+index 4b1a09d..4d300cc 100644
+--- a/modules/geolocation_demo/config/optional/field.field.node.geolocation_default_article.field_geolocation_demo_single.yml
++++ b/modules/geolocation_demo/config/optional/field.field.node.geolocation_default_article.field_geolocation_demo_single.yml
+@@ -22,7 +22,7 @@ default_value:
+     lat_sin: null
+     lat_cos: null
+     lng_rad: null
+-    data: {  }
++    data: null
+ default_value_callback: ''
+ settings: {  }
+ field_type: geolocation
+diff --git a/modules/geolocation_demo/geolocation_demo.links.menu.yml b/modules/geolocation_demo/geolocation_demo.links.menu.yml
+index 55035a5..8d265b1 100644
+--- a/modules/geolocation_demo/geolocation_demo.links.menu.yml
++++ b/modules/geolocation_demo/geolocation_demo.links.menu.yml
+@@ -24,4 +24,4 @@ geolocation_demo.form_elements:
+   description: 'Geolocation elements'
+   route_name: geolocation_demo.form_elements
+   weight: 103
+-  menu_name: geolocation-demo
++  menu_name: geolocation-demo
+\ No newline at end of file
+diff --git a/modules/geolocation_demo/src/Controller/DemoWidgetFormsController.php b/modules/geolocation_demo/src/Controller/DemoWidgetFormsController.php
+index fecdc59..30d2e01 100644
+--- a/modules/geolocation_demo/src/Controller/DemoWidgetFormsController.php
++++ b/modules/geolocation_demo/src/Controller/DemoWidgetFormsController.php
+@@ -90,7 +90,11 @@ class DemoWidgetFormsController extends ControllerBase {
+     ] as $widget_id) {
+       $widget = $this->pluginManagerFieldWidget->getInstance(array_merge_recursive($widget_settings, ['configuration' => ['type' => $widget_id]]));
+ 
+-      $form[$widget_id] = $widget->formElement($items, 0, ['#title' => $widget->getPluginDefinition()['label']], $form, $form_state);
++      $form[$widget_id] = [
++        '#type' => 'fieldset',
++        '#title' => $widget->getPluginDefinition()['label'],
++        'widget' => $widget->formElement($items, 0, [], $form, $form_state),
++      ];
+     }
+ 
+     return $form;
+diff --git a/modules/geolocation_google_places_api/css/geolocation-google-places-api-geocoder.css b/modules/geolocation_google_places_api/css/geolocation-google-places-api-geocoder.css
+deleted file mode 100644
+index 90738fe..0000000
+--- a/modules/geolocation_google_places_api/css/geolocation-google-places-api-geocoder.css
++++ /dev/null
+@@ -1,100 +0,0 @@
+-@font-face {
+-  font-family: 'Geolcoation Google Places API icon font';
+-  src: url('../font/geolocation-google-places-icon-font.woff') format('woff');
+-  font-weight: normal;
+-  font-style: normal;
+-}
+-
+-.geolocation-geocoder-item::before {
+-  display: inline-block;
+-  padding-right: 5px;
+-  font-family: 'Geolcoation Google Places API icon font', Helvetica, sans-serif;
+-  font-style: normal;
+-  font-weight: normal;
+-  line-height: inherit;
+-  vertical-align: bottom;
+-  content: '\0051';
+-}
+-
+-.geolocation-geocoder-item.bar:before {
+-  content: '\0041';
+-}
+-.geolocation-geocoder-item.bike:before {
+-  content: '\0042';
+-}
+-.geolocation-geocoder-item.bookmark:before {
+-  content: '\0043';
+-}
+-.geolocation-geocoder-item.bus-station:before {
+-  content: '\0044';
+-}
+-.geolocation-geocoder-item.crosshairs:before {
+-  content: '\0045';
+-}
+-.geolocation-geocoder-item.route::before,
+-.geolocation-geocoder-item.directions:before {
+-  content: '\0046';
+-}
+-.geolocation-geocoder-item.fence:before {
+-  content: '\0047';
+-}
+-.geolocation-geocoder-item.guidepost:before {
+-  content: '\0048';
+-}
+-.geolocation-geocoder-item.heart:before {
+-  content: '\0049';
+-}
+-.geolocation-geocoder-item.establishment::before,
+-.geolocation-geocoder-item.home:before {
+-  content: '\004a';
+-}
+-.geolocation-geocoder-item.hotel:before {
+-  content: '\004b';
+-}
+-.geolocation-geocoder-item.locate:before {
+-  content: '\004c';
+-}
+-.geolocation-geocoder-item.other-1:before {
+-  content: '\004d';
+-}
+-.geolocation-geocoder-item.other-2:before {
+-  content: '\004e';
+-}
+-.geolocation-geocoder-item.partly_cloudy:before {
+-  content: '\004f';
+-}
+-.geolocation-geocoder-item.person:before {
+-  content: '\0050';
+-}
+-.geolocation-geocoder-item.place:before {
+-  content: '\0051';
+-}
+-.geolocation-geocoder-item.rate_review:before {
+-  content: '\0052';
+-}
+-.geolocation-geocoder-item.search:before {
+-  content: '\0053';
+-}
+-.geolocation-geocoder-item.share:before {
+-  content: '\0054';
+-}
+-.geolocation-geocoder-item.star:before {
+-  content: '\0055';
+-}
+-.geolocation-geocoder-item.suitecase:before {
+-  content: '\0056';
+-}
+-.geolocation-geocoder-item.point_of_interest::before,
+-.geolocation-geocoder-item.terrain:before {
+-  content: '\0057';
+-}
+-.geolocation-geocoder-item.time:before {
+-  content: '\0058';
+-}
+-.geolocation-geocoder-item.traffic:before {
+-  content: '\0059';
+-}
+-.geolocation-geocoder-item.transit_station::before,
+-.geolocation-geocoder-item.train-station:before {
+-  content: '\005a';
+-}
+diff --git a/modules/geolocation_google_places_api/font/geolocation-google-places-icon-font.woff b/modules/geolocation_google_places_api/font/geolocation-google-places-icon-font.woff
+deleted file mode 100644
+index cc23c63..0000000
+Binary files a/modules/geolocation_google_places_api/font/geolocation-google-places-icon-font.woff and /dev/null differ
+diff --git a/modules/geolocation_google_places_api/geolocation_google_places_api.libraries.yml b/modules/geolocation_google_places_api/geolocation_google_places_api.libraries.yml
+index 0dae31d..e7b8087 100644
+--- a/modules/geolocation_google_places_api/geolocation_google_places_api.libraries.yml
++++ b/modules/geolocation_google_places_api/geolocation_google_places_api.libraries.yml
+@@ -1,9 +1,6 @@
+ # Google places geocoder function.
+ geolocation_google_places_api.geocoder.googleplacesapi:
+   version: 8.x-1.x
+-  css:
+-    theme:
+-      css/geolocation-google-places-api-geocoder.css: {}
+   js:
+     js/geolocation-google-places-api-geocoder.js: {}
+   dependencies:
+diff --git a/modules/geolocation_google_places_api/js/geolocation-google-places-api-geocoder.js b/modules/geolocation_google_places_api/js/geolocation-google-places-api-geocoder.js
+index 7c24383..b8f8957 100644
+--- a/modules/geolocation_google_places_api/js/geolocation-google-places-api-geocoder.js
++++ b/modules/geolocation_google_places_api/js/geolocation-google-places-api-geocoder.js
+@@ -44,12 +44,7 @@
+    * @param {HTMLElement} context Context
+    */
+   Drupal.geolocation.geocoder.googlePlacesAPI.attach = function (context) {
+-    var autocomplete = $('input.geolocation-geocoder-google-places-api', context);
+-    if (!autocomplete.length) {
+-      return;
+-    }
+-
+-    autocomplete.once().autocomplete({
++    $('input.geolocation-geocoder-google-places-api', context).once().autocomplete({
+       autoFocus: true,
+       source: function (request, response) {
+         var autocompleteResults = [];
+@@ -75,8 +70,7 @@
+               $.each(results, function (index, result) {
+                 autocompleteResults.push({
+                   value: result.description,
+-                  place_id: result.place_id,
+-                  classes: result.types.reverse()
++                  place_id: result.place_id
+                 });
+               });
+             }
+@@ -114,15 +108,7 @@
+         );
+       }
+     })
+-    .autocomplete('instance')
+-    ._renderItem = function (ul, item) {
+-      return $('<li></li>')
+-        .attr('data-value', item.value)
+-        .append('<div><div class="geolocation-geocoder-item ' + item.classes.join(' ') + '">' + item.label + '</div></div>')
+-        .appendTo(ul);
+-    };
+-
+-    autocomplete.on('input', function () {
++    .on('input', function () {
+       $('.geolocation-geocoder-google-places-api-state[data-source-identifier="' + $(this).data('source-identifier') + '"]').val(0);
+       Drupal.geolocation.geocoder.clearCallback($(this).data('source-identifier'));
+     });
+@@ -138,22 +124,19 @@
+    */
+   Drupal.behaviors.geolocationGeocoderGooglePlacesApi = {
+     attach: function (context) {
+-      var attribution_block = $('#geolocation-google-places-api-attribution');
+-      if (attribution_block.length === 0) {
+-        console.error("Geolocation Google Places API attribution block missing."); // eslint-disable-line no-console
+-        return;
+-      }
++
+       if (typeof Drupal.geolocation.geocoder.googlePlacesAPI.autocompleteService === 'undefined') {
+         if (typeof Drupal.geolocation.loadGoogle === 'function') {
++          // First load the library from google.
+           Drupal.geolocation.loadGoogle(function () {
+             if (typeof Drupal.geolocation.geocoder.googlePlacesAPI.service === 'undefined') {
+-              Drupal.geolocation.geocoder.googlePlacesAPI.service = new google.maps.places.PlacesService(attribution_block.get(0));
+-              Drupal.geolocation.geocoder.googlePlacesAPI.autocompleteService = new google.maps.places.AutocompleteService();
++              var attribution_block = $('#geolocation-google-places-api-attribution');
++              if (attribution_block.length === 1) {
++                Drupal.geolocation.geocoder.googlePlacesAPI.service = new google.maps.places.PlacesService(attribution_block.get(0));
++                Drupal.geolocation.geocoder.googlePlacesAPI.autocompleteService = new google.maps.places.AutocompleteService();
+ 
+-              Drupal.geolocation.geocoder.googlePlacesAPI.attach(context);
+-            }
+-            else {
+-              Drupal.geolocation.geocoder.googlePlacesAPI.attach(context);
++                Drupal.geolocation.geocoder.googlePlacesAPI.attach(context);
++              }
+             }
+           });
+         }
+diff --git a/src/GeolocationItemTokenTrait.php b/src/GeolocationItemTokenTrait.php
+index 18a1e6b..ae8d153 100644
+--- a/src/GeolocationItemTokenTrait.php
++++ b/src/GeolocationItemTokenTrait.php
+@@ -141,9 +141,7 @@ trait GeolocationItemTokenTrait {
+             // Maybe there is values inside the values.
+             if (is_array($value) || ($value instanceof \Traversable)) {
+               foreach ($value as $deepkey => $deepvalue) {
+-                if (is_string($deepvalue)) {
+-                  $replacements['[geolocation_current_item:data:' . $key . ':' . $deepkey . ']'] = (string) $deepvalue;
+-                }
++                $replacements['[geolocation_current_item:data:' . $key . ':' . $deepkey . ']'] = (string) $deepvalue;
+               }
+             }
+             else {
+diff --git a/src/GoogleMapsDisplayTrait.php b/src/GoogleMapsDisplayTrait.php
+index f0667ea..58fb8f1 100644
+--- a/src/GoogleMapsDisplayTrait.php
++++ b/src/GoogleMapsDisplayTrait.php
+@@ -174,9 +174,7 @@ trait GoogleMapsDisplayTrait {
+     $default_settings = self::getGoogleMapDefaultSettings();
+     $settings = array_replace_recursive($default_settings, $settings);
+ 
+-    if (!empty($settings['google_map_settings']['marker_icon_path'])) {
+-      $settings['google_map_settings']['marker_icon_path'] = file_url_transform_relative(file_create_url(\Drupal::token()->replace($settings['google_map_settings']['marker_icon_path'])));
+-    }
++    $settings['google_map_settings']['marker_icon_path'] = \Drupal::token()->replace($settings['google_map_settings']['marker_icon_path']);
+ 
+     foreach ($settings['google_map_settings'] as $key => $setting) {
+       if (!isset($default_settings['google_map_settings'][$key])) {
+diff --git a/src/Plugin/Field/FieldFormatter/GeolocationGoogleMapFormatter.php b/src/Plugin/Field/FieldFormatter/GeolocationGoogleMapFormatter.php
+index c77b6e3..53733f0 100644
+--- a/src/Plugin/Field/FieldFormatter/GeolocationGoogleMapFormatter.php
++++ b/src/Plugin/Field/FieldFormatter/GeolocationGoogleMapFormatter.php
+@@ -10,7 +10,7 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
+ use Drupal\geolocation\GeolocationItemTokenTrait;
+ 
+ /**
+- * Plugin implementation of the 'geolocation_googlemap' formatter.
++ * Plugin implementation of the 'geolocation_latlng' formatter.
+  *
+  * @FieldFormatter(
+  *   id = "geolocation_map",
+diff --git a/src/Plugin/Field/FieldWidget/GeolocationLatlngWidget.php b/src/Plugin/Field/FieldWidget/GeolocationLatlngWidget.php
+index 637ba65..f386135 100644
+--- a/src/Plugin/Field/FieldWidget/GeolocationLatlngWidget.php
++++ b/src/Plugin/Field/FieldWidget/GeolocationLatlngWidget.php
+@@ -34,7 +34,6 @@ class GeolocationLatlngWidget extends WidgetBase {
+       '#empty_value' => '',
+       '#maxlength' => 255,
+       '#required' => $this->fieldDefinition->isRequired(),
+-      '#description_display' => 'after',
+     ];
+ 
+     $lat_example = $element['lat']['#default_value'] ?: '51.47879';
+@@ -51,7 +50,6 @@ class GeolocationLatlngWidget extends WidgetBase {
+       '#default_value' => (isset($items[$delta]->lng)) ? $items[$delta]->lng : NULL,
+       '#maxlength' => 255,
+       '#required' => $this->fieldDefinition->isRequired(),
+-      '#description_display' => 'after',
+     ];
+ 
+     $lng_example = $element['lng']['#default_value'] ?: '-0.010677';
+diff --git a/src/Plugin/geolocation/Geocoder/GoogleGeocodingAPI.php b/src/Plugin/geolocation/Geocoder/GoogleGeocodingAPI.php
+index 941ac7c..fb59507 100644
+--- a/src/Plugin/geolocation/Geocoder/GoogleGeocodingAPI.php
++++ b/src/Plugin/geolocation/Geocoder/GoogleGeocodingAPI.php
+@@ -194,7 +194,7 @@ class GoogleGeocodingAPI extends GeocoderBase {
+     $request_url = 'https://maps.googleapis.com/maps/api/geocode/json?address=' . $address;
+ 
+     if (!empty($this->geolocationSettings->get('google_map_api_server_key'))) {
+-      $request_url .= '&key=' . $this->geolocationSettings->get('google_map_api_server_key');
++      $request_url .= '&key=' . $this->geolocationSettings->get('google_map_api_key');
+     }
+     elseif (!empty($this->geolocationSettings->get('google_map_api_key'))) {
+       $request_url .= '&key=' . $this->geolocationSettings->get('google_map_api_key');
+@@ -221,12 +221,6 @@ class GoogleGeocodingAPI extends GeocoderBase {
+       $result['status'] != 'OK'
+       || empty($result['results'][0]['geometry'])
+     ) {
+-      if(isset($result['error_message'])){
+-        \Drupal::logger('geolocation')->error(t('Unable to geocode "@address" with error: "@error".', [
+-          '@address' => $address,
+-          '@error' => $result['error_message'],
+-        ]));
+-      }
+       return FALSE;
+     }
+ 
+diff --git a/src/Plugin/views/style/CommonMap.php b/src/Plugin/views/style/CommonMap.php
+index 8c76594..2e1487f 100644
+--- a/src/Plugin/views/style/CommonMap.php
++++ b/src/Plugin/views/style/CommonMap.php
+@@ -163,6 +163,7 @@ class CommonMap extends StylePluginBase {
+       $build['#attached']['library'][] = 'geolocation/geolocation.markerclusterer';
+       $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer'] = [];
+       $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['enable'] = TRUE;
++      $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['advanced'] = $this->options['marker_clusterer_advanced'];
+       $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['imagePath'] = $this->options['marker_clusterer_image_path'];
+       if (!empty($this->options['marker_clusterer_styles'])) {
+         $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['styles'] = json_decode($this->options['marker_clusterer_styles']);
+@@ -258,7 +259,7 @@ class CommonMap extends StylePluginBase {
+               /** @var \Drupal\image\Entity\ImageStyle $style */
+               $style = ImageStyle::load($image_items[0]['rendered']['#image_style']);
+               if (!empty($style)) {
+-                $icon_url = file_url_transform_relative($style->buildUrl($file_uri));
++                $icon_url = $style->buildUrl($file_uri);
+               }
+               else {
+                 $icon_url = file_url_transform_relative(file_create_url($file_uri));
+@@ -291,7 +292,7 @@ class CommonMap extends StylePluginBase {
+             && !empty($this->rowTokens[$row_number])
+           ) {
+             $icon_token_uri = $this->viewsTokenReplace($this->options['google_map_settings']['marker_icon_path'], $this->rowTokens[$row_number]);
+-            $icon_token_url = file_create_url(trim($icon_token_uri));
++            $icon_token_url = file_create_url($icon_token_uri);
+ 
+             if ($icon_token_url) {
+               $location['#icon'] = $icon_token_url;
+@@ -455,6 +456,7 @@ class CommonMap extends StylePluginBase {
+     $options['marker_row_number'] = ['default' => FALSE];
+     $options['id_field'] = ['default' => ''];
+     $options['marker_clusterer'] = ['default' => 0];
++    $options['marker_clusterer_advanced'] = ['default' => FALSE];
+     $options['marker_clusterer_image_path'] = ['default' => ''];
+     $options['marker_clusterer_styles'] = ['default' => []];
+     $options['dynamic_map'] = [
+@@ -823,6 +825,17 @@ class CommonMap extends StylePluginBase {
+       '#description' => $this->t('Various <a href=":url">examples</a> are available.', [':url' => 'https://developers.google.com/maps/documentation/javascript/marker-clustering']),
+       '#default_value' => $this->options['marker_clusterer'],
+     ];
++    $form['marker_clusterer_advanced'] = [
++      '#group' => 'style_options][marker_clusterer_settings',
++      '#title' => $this->t('Enable advanced clustering'),
++      '#type' => 'checkbox',
++      '#default_value' => $this->options['marker_clusterer_advanced'],
++      '#states' => [
++        'visible' => [
++          ':input[name="style_options[marker_clusterer]"]' => ['checked' => TRUE],
++        ],
++      ],
++    ];
+     $form['marker_clusterer_image_path'] = [
+       '#group' => 'style_options][marker_clusterer_settings',
+       '#title' => $this->t('Cluster image path'),
+@@ -877,9 +890,10 @@ class CommonMap extends StylePluginBase {
+       if ($json_result === NULL) {
+         $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoding style JSON failed. Error: %error.', ['%error' => json_last_error()]));
+       }
+-      elseif (!is_array($json_result)) {
+-        $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoded style JSON is not an array.'));
+-      }
++      // Commented json_decode without second param returns object.
++//      elseif (!is_array($json_result)) {
++//        $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoded style JSON is not an array.'));
++//      }
+     }
+ 
+     $this->validateGoogleMapsSettingsForm($form, $form_state, 'style_options');
+diff --git a/templates/geolocation-common-map-display.html.twig b/templates/geolocation-common-map-display.html.twig
+index ea77ae7..22fb700 100644
+--- a/templates/geolocation-common-map-display.html.twig
++++ b/templates/geolocation-common-map-display.html.twig
+@@ -1,8 +1,8 @@
+ <div id="{{ id }}" class="geolocation-common-map"  {% if centre.lat_north_east is not empty and centre.lng_north_east is not empty and centre.lat_south_west is not empty and centre.lng_south_west is not empty %} data-centre-lat-north-east="{{ centre.lat_north_east }}" data-centre-lng-north-east="{{ centre.lng_north_east }}" data-centre-lat-south-west="{{ centre.lat_south_west }}" data-centre-lng-south-west="{{ centre.lng_south_west }}" {% endif %} {% if centre.lat is not empty and centre.lng is not empty %} data-centre-lat="{{ centre.lat }}" data-centre-lng="{{ centre.lng }}" {% endif %} {% if fitbounds is not empty %} data-fitbounds="{{ fitbounds }}" {% endif %} {% if clientlocation is not empty %} data-clientlocation="{{ clientlocation }}" {% endif %}>
+-    <div class="geolocation-common-map-container"></div>
+     <div class="geolocation-common-map-locations">
+-        {%  for location in locations %}
+-            {{ location }}
+-        {% endfor %}
++    {%  for location in locations %}
++        {{ location }}
++    {% endfor %}
+     </div>
++    <div class="geolocation-common-map-container"></div>
+ </div>
+diff --git a/tests/src/FunctionalJavascript/GeolocationCommonMapAjaxJavascriptTest.php b/tests/src/FunctionalJavascript/GeolocationCommonMapAjaxJavascriptTest.php
+index 2ea5c90..c662f50 100644
+--- a/tests/src/FunctionalJavascript/GeolocationCommonMapAjaxJavascriptTest.php
++++ b/tests/src/FunctionalJavascript/GeolocationCommonMapAjaxJavascriptTest.php
+@@ -2,6 +2,7 @@
+ 
+ namespace Drupal\Tests\geolocation\FunctionalJavascript;
+ 
++use Drupal\FunctionalJavascriptTests\JavascriptTestBase;
+ use Drupal\views\Tests\ViewTestData;
+ use Drupal\field\Entity\FieldStorageConfig;
+ use Drupal\field\Entity\FieldConfig;
+@@ -13,7 +14,9 @@ use Drupal\Core\Entity\Entity\EntityFormDisplay;
+  *
+  * @group geolocation
+  */
+-class GeolocationCommonMapAjaxJavascriptTest extends GeolocationGoogleJavascriptTestBase {
++class GeolocationCommonMapAjaxJavascriptTest extends JavascriptTestBase {
++
++  use GeolocationGoogleTestTrait;
+ 
+   /**
+    * {@inheritdoc}
+diff --git a/tests/src/FunctionalJavascript/GeolocationGoogleGeocoderWidgetTest.php b/tests/src/FunctionalJavascript/GeolocationGoogleGeocoderWidgetTest.php
+index d480cea..1a5b089 100644
+--- a/tests/src/FunctionalJavascript/GeolocationGoogleGeocoderWidgetTest.php
++++ b/tests/src/FunctionalJavascript/GeolocationGoogleGeocoderWidgetTest.php
+@@ -2,6 +2,7 @@
+ 
+ namespace Drupal\Tests\geolocation\FunctionalJavascript;
+ 
++use Drupal\FunctionalJavascriptTests\JavascriptTestBase;
+ use Drupal\field\Entity\FieldStorageConfig;
+ use Drupal\field\Entity\FieldConfig;
+ use Drupal\Core\Entity\Entity\EntityViewDisplay;
+@@ -12,7 +13,9 @@ use Drupal\Core\Entity\Entity\EntityFormDisplay;
+  *
+  * @group geolocation
+  */
+-class GeolocationGoogleGeocoderWidgetTest extends GeolocationGoogleJavascriptTestBase {
++class GeolocationGoogleGeocoderWidgetTest extends JavascriptTestBase {
++
++  use GeolocationGoogleTestTrait;
+ 
+   public $adminUser;
+ 
+diff --git a/tests/src/FunctionalJavascript/GeolocationGoogleJavascriptTestBase.php b/tests/src/FunctionalJavascript/GeolocationGoogleJavascriptTestBase.php
+deleted file mode 100644
+index 3522e03..0000000
+--- a/tests/src/FunctionalJavascript/GeolocationGoogleJavascriptTestBase.php
++++ /dev/null
+@@ -1,43 +0,0 @@
+-<?php
+-
+-namespace Drupal\Tests\geolocation\FunctionalJavascript;
+-
+-use Drupal\FunctionalJavascriptTests\JavascriptTestBase;
+-use Zumba\GastonJS\Exception\JavascriptError;
+-
+-/**
+- * Support tests using Google Maps API.
+- */
+-abstract class GeolocationGoogleJavascriptTestBase extends JavascriptTestBase {
+-
+-  /**
+-   * Filter the missing key Google Maps API error.
+-   *
+-   * @param mixed $path
+-   *   Path to get.
+-   *
+-   * @return string
+-   *   Return what drupal would.
+-   *
+-   * @throws \Zumba\GastonJS\Exception\JavascriptError
+-   */
+-  protected function drupalGetFilterGoogleKey($path) {
+-
+-    try {
+-      $this->drupalGet($path);
+-      $this->getSession()->getDriver()->wait(1000, '1==2');
+-    }
+-    catch (JavascriptError $e) {
+-      foreach ($e->javascriptErrors() as $errorItem) {
+-        if (strpos((string) $errorItem, 'MissingKeyMapError') !== FALSE) {
+-          continue;
+-        }
+-        else {
+-          throw $e;
+-        }
+-      }
+-    }
+-    return FALSE;
+-  }
+-
+-}
+diff --git a/tests/src/FunctionalJavascript/GeolocationGoogleTestTrait.php b/tests/src/FunctionalJavascript/GeolocationGoogleTestTrait.php
+new file mode 100644
+index 0000000..ab72771
+--- /dev/null
++++ b/tests/src/FunctionalJavascript/GeolocationGoogleTestTrait.php
+@@ -0,0 +1,42 @@
++<?php
++
++namespace Drupal\Tests\geolocation\FunctionalJavascript;
++
++use Zumba\GastonJS\Exception\JavascriptError;
++
++/**
++ * Support tests using Google Maps API.
++ */
++trait GeolocationGoogleTestTrait {
++
++  /**
++   * Filter the missing key Google Maps API error.
++   *
++   * @param mixed $path
++   *   Path to get.
++   *
++   * @return string
++   *   Return what drupal would.
++   *
++   * @throws \Zumba\GastonJS\Exception\JavascriptError
++   */
++  protected function drupalGetFilterGoogleKey($path) {
++    /* @var $this \Drupal\FunctionalJavascriptTests\JavascriptTestBase */
++    try {
++      $this->drupalGet($path);
++      $this->getSession()->getDriver()->wait(1000, '1==2');
++    }
++    catch (JavascriptError $e) {
++      foreach ($e->javascriptErrors() as $errorItem) {
++        if (strpos((string) $errorItem, 'MissingKeyMapError') !== FALSE) {
++          continue;
++        }
++        else {
++          throw $e;
++        }
++      }
++    }
++    return FALSE;
++  }
++
++}
+diff --git a/tests/src/FunctionalJavascript/GeolocationJavascriptTest.php b/tests/src/FunctionalJavascript/GeolocationJavascriptTest.php
+index b4f5b28..15daeda 100644
+--- a/tests/src/FunctionalJavascript/GeolocationJavascriptTest.php
++++ b/tests/src/FunctionalJavascript/GeolocationJavascriptTest.php
+@@ -2,6 +2,7 @@
+ 
+ namespace Drupal\Tests\geolocation\FunctionalJavascript;
+ 
++use Drupal\FunctionalJavascriptTests\JavascriptTestBase;
+ use Drupal\views\Tests\ViewTestData;
+ use Drupal\field\Entity\FieldStorageConfig;
+ use Drupal\field\Entity\FieldConfig;
+@@ -13,7 +14,9 @@ use Drupal\Core\Entity\Entity\EntityFormDisplay;
+  *
+  * @group geolocation
+  */
+-class GeolocationJavascriptTest extends GeolocationGoogleJavascriptTestBase {
++class GeolocationJavascriptTest extends JavascriptTestBase {
++
++  use GeolocationGoogleTestTrait;
+ 
+   /**
+    * {@inheritdoc}
+@@ -144,7 +147,7 @@ class GeolocationJavascriptTest extends GeolocationGoogleJavascriptTestBase {
+     $this->drupalLogin($admin_user);
+ 
+     // Get the geolocation configuration settings page.
+-    $this->drupalGetFilterGoogleKey('admin/config/services/geolocation');
++    $this->drupalGet('admin/config/services/geolocation');
+ 
+     // Enable the checkbox to use current language.
+     $edit = ['use_current_language' => 1];
+@@ -163,21 +166,17 @@ class GeolocationJavascriptTest extends GeolocationGoogleJavascriptTestBase {
+     $edit = ['language_interface[enabled][language-url]' => '1'];
+     $this->drupalPostForm('admin/config/regional/language/detection', $edit, t('Save settings'));
+ 
+-    $this->drupalGetFilterGoogleKey('fr/node/4');
++    $this->drupalGet('fr/node/4');
+     $this->assertSession()->elementExists('css', 'html[lang="fr"]');
+ 
+     $anchor = $this->assertSession()->waitForElement('css', 'a[href^="https://maps.google.com"][href*="hl="]', 3000);
++    // To control the test messages, search inside the anchor's href.
++    // This is achieved by looking for the "hl" parameter in an anchor's href:
++    // https://maps.google.com/maps?ll=54,49&z=10&t=m&hl=fr&gl=US&mapclient=apiv3
++    $contains_french_link = strpos($anchor->getAttribute('href'), 'hl=fr');
+ 
+-    // TODO: Google maps loading is not reliable right now.
+-    if ($anchor) {
+-      // To control the test messages, search inside the anchor's href.
+-      // This is achieved by looking for the "hl" parameter in an anchor's href:
+-      // https://maps.google.com/maps?ll=54,49&z=10&t=m&hl=fr&gl=US&mapclient=apiv3
+-      $contains_french_link = strpos($anchor->getAttribute('href'), 'hl=fr');
+-
+-      if ($contains_french_link === FALSE) {
+-        $this->fail('Did not find expected parameters from Google Maps link for French translation.');
+-      }
++    if ($contains_french_link === FALSE) {
++      $this->fail('Did not find expected parameters from Google Maps link for French translation.');
+     }
+   }
+ 
+diff --git a/tests/src/FunctionalJavascript/GeolocationTokenFormatterTest.php b/tests/src/FunctionalJavascript/GeolocationTokenFormatterTest.php
+index c3d9e8b..fb34c25 100644
+--- a/tests/src/FunctionalJavascript/GeolocationTokenFormatterTest.php
++++ b/tests/src/FunctionalJavascript/GeolocationTokenFormatterTest.php
+@@ -2,6 +2,7 @@
+ 
+ namespace Drupal\Tests\geolocation\FunctionalJavascript;
+ 
++use Drupal\FunctionalJavascriptTests\JavascriptTestBase;
+ use Drupal\field\Entity\FieldStorageConfig;
+ use Drupal\field\Entity\FieldConfig;
+ use Drupal\Core\Entity\Entity\EntityViewDisplay;
+@@ -12,7 +13,7 @@ use Drupal\Core\Entity\Entity\EntityFormDisplay;
+  *
+  * @group geolocation
+  */
+-class GeolocationTokenFormatterTest extends GeolocationGoogleJavascriptTestBase {
++class GeolocationTokenFormatterTest extends JavascriptTestBase {
+ 
+   /**
+    * {@inheritdoc}
+@@ -79,7 +80,7 @@ class GeolocationTokenFormatterTest extends GeolocationGoogleJavascriptTestBase
+    * Tests the token formatter.
+    */
+   public function testGeocoderTokenizedTestReplacement() {
+-    $this->drupalGetFilterGoogleKey('node/1');
++    $this->drupalGet('node/1');
+     $this->assertSession()->responseContains('<span class="geolocation-latlng">52, 47</span>');
+ 
+     EntityViewDisplay::load('node.article.default')
+@@ -92,7 +93,7 @@ class GeolocationTokenFormatterTest extends GeolocationGoogleJavascriptTestBase
+       ])
+       ->save();
+ 
+-    $this->drupalGetFilterGoogleKey('node/1');
++    $this->drupalGet('node/1');
+     $this->assertSession()->responseContains('<div class="testing">52/47</div>');
+     $this->assertSession()->responseContains('<h1 class="testingtitle">My home</h1>');
+   }
