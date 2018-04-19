@@ -25,20 +25,41 @@ index 01258f2..aa02f50 100644
 +  vertical-align: top;
 +}
 diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
-index a318c32..d02854f 100644
+index a318c32..93c977d 100644
 --- a/js/geolocation-common-map.js
 +++ b/js/geolocation-common-map.js
-@@ -496,14 +496,247 @@
-             markerClustererStyles = commonMapSettings.markerClusterer.styles;
+@@ -81,6 +81,12 @@
+        */
+       function (mapId, commonMapSettings) {
+ 
++        // Check if advanced clustering is enabled.
++        var advanced = false;
++        if (commonMapSettings.markerClusterer.advanced) {
++          advanced = commonMapSettings.markerClusterer.advanced;
++        }
++
+         /*
+          * Hide form if requested.
+          */
+@@ -347,7 +353,7 @@
+         /**
+          * Result handling.
+          */
+-        // A Google Maps API tool to re-center the map on its content.
++          // A Google Maps API tool to re-center the map on its content.
+         var bounds = new google.maps.LatLngBounds();
+         Drupal.geolocation.removeMapMarker(geolocationMap);
+ 
+@@ -381,6 +387,8 @@
+             markerConfig.label = location.data('markerLabel').toString();
            }
  
-+          // Check if advanced clustering is enabled.
-+          var advanced = false;
-+          if (commonMapSettings.markerClusterer.advanced) {
-+            advanced = commonMapSettings.markerClusterer.advanced;
-+          }
++          markerConfig['advanced'] = advanced;
 +
-           geolocationMap.markerClusterer = new MarkerClusterer(
+           var skipInfoWindow = false;
+           if (commonMapSettings.markerScrollToResult === true) {
+             skipInfoWindow = true;
+@@ -500,10 +508,206 @@
              geolocationMap.googleMap,
              geolocationMap.mapMarkers,
              {
@@ -72,45 +93,13 @@ index a318c32..d02854f 100644
 +
 +            // Bind click on cluster marker.
 +            google.maps.event.addListener(geolocationMap.markerClusterer, 'clusterclick', function (cluster) {
-+              // If "Icon source field" for markers is configured -
-+              // adjust marker of cluster upon opening the cluster infoWindow
-+              // and using pagination inside this infoWindows.
-+              var geolocationAdjustClusterIcon = function (cluster, marker_id) {
-+                if (cluster.markers_ === undefined) {
-+                  // In case if map was zoomed after cluster
-+                  // infoWindow was opened.
-+                  return false;
-+                }
-+
-+                var custom_id = cluster.markers_[0].position.lat()
-+                  + '|' + cluster.markers_[0].position.lng();
-+                var marker_img = '';
-+
-+                if (marker_id !== undefined) {
-+                  marker_id = marker_id ? marker_id : 0;
-+                  marker_img = cluster.markers_[marker_id].icon;
-+                }
-+                else {
-+                  marker_img = cluster.clusterIcon_.url_;
-+                }
-+
-+                if (marker_img) {
-+                  // Set new cluster marker icon.
-+                  $('span[data-cluster-id="' + custom_id + '"]')
-+                    .parent().closest('div')
-+                    .css('transition', 'background-image .5s')
-+                    .css('-webkit-transition', 'background-image .5s')
-+                    .css('background-image', 'url("' + marker_img + '")');
-+                }
-+              };
-+
 +              // Revert to default all clusters icons before opening new one.
 +              $.each(geolocationMap.markerClusterer.clusters_, function (i, v) {
-+                geolocationAdjustClusterIcon(v);
++                Drupal.geolocation.geolocationAdjustClusterIcon(v);
 +              });
 +
 +              // Changed opened cluster icon.
-+              geolocationAdjustClusterIcon(cluster, 0);
++              Drupal.geolocation.geolocationAdjustClusterIcon(cluster, 0);
 +
 +              var markers = cluster.markers_;
 +              var markers_count = markers.length;
@@ -178,12 +167,13 @@ index a318c32..d02854f 100644
 +                      .appendTo($pager);
 +
 +                    var infoWindow = new google.maps.InfoWindow({
-+                      content: $wrapper.html()
++                      content: $wrapper.html(),
++                      disableAutoPan: geolocationMap.googleMap.settings.google_map_settings.disableAutoPan
 +                    });
 +
 +                    // Revert cluster icon after popup closed.
 +                    google.maps.event.addListener(infoWindow, "closeclick", function () {
-+                      geolocationAdjustClusterIcon(cluster);
++                      Drupal.geolocation.geolocationAdjustClusterIcon(cluster);
 +                    });
 +
 +                    // Info widnow position same as first item in the cluster.
@@ -256,7 +246,7 @@ index a318c32..d02854f 100644
 +                        $('.geolocation-info-ul').css('left', -left_skip);
 +
 +                        // Change the cluster icon.
-+                        geolocationAdjustClusterIcon(cluster, next - 1);
++                        Drupal.geolocation.geolocationAdjustClusterIcon(cluster, next - 1);
 +                      }
 +                    };
 +
@@ -277,6 +267,77 @@ index a318c32..d02854f 100644
          }
  
          if (mapWrapper.data('fitbounds') === 1) {
+diff --git a/js/geolocation-google-maps-api.js b/js/geolocation-google-maps-api.js
+index 69e0be4..abbad63 100644
+--- a/js/geolocation-google-maps-api.js
++++ b/js/geolocation-google-maps-api.js
+@@ -326,7 +326,7 @@
+     map.settings.google_map_settings.maxZoom = parseInt(map.settings.google_map_settings.maxZoom) || Drupal.geolocation.defaultMapSettings.maxZoom;
+     map.settings.google_map_settings.minZoom = parseInt(map.settings.google_map_settings.minZoom) || Drupal.geolocation.defaultMapSettings.minZoom;
+ 
+-     /**
++    /**
+      * Create the map object and assign it to the map.
+      *
+      * @type {GoogleMap} map.googleMap
+@@ -412,7 +412,15 @@
+           }
+           map.infoWindow = currentInfoWindow;
+         }
++
+         currentInfoWindow.open(map.googleMap, currentMarker);
++
++        if (markerSettings.advanced && map.markerClusterer !== undefined) {
++          // Revert to default all clusters icons before opening new one.
++          $.each(map.markerClusterer.clusters_, function (i, v) {
++            Drupal.geolocation.geolocationAdjustClusterIcon(v);
++          });
++        }
+       });
+ 
+       if (map.settings.google_map_settings.info_auto_display) {
+@@ -538,4 +546,41 @@
+     });
+   };
+ 
++  /**
++   * If "Icon source field" for markers is configured -
++   * adjust marker of cluster upon opening the cluster infoWindow
++   * and using pagination inside this infoWindows.
++   *
++   * @param cluster
++   * @param marker_id
++   * @returns {boolean}
++   */
++  Drupal.geolocation.geolocationAdjustClusterIcon = function (cluster, marker_id) {
++    if (cluster.markers_ === undefined) {
++      // In case if map was zoomed after cluster
++      // infoWindow was opened.
++      return false;
++    }
++    var custom_id = cluster.markers_[0].position.lat()
++      + '|' + cluster.markers_[0].position.lng();
++    var marker_img = '';
++
++    if (marker_id !== undefined) {
++      marker_id = marker_id ? marker_id : 0;
++      marker_img = cluster.markers_[marker_id].icon;
++    }
++    else {
++      marker_img = cluster.clusterIcon_.url_;
++    }
++
++    if (marker_img) {
++      // Set new cluster marker icon.
++      $('span[data-cluster-id="' + custom_id + '"]')
++        .parent().closest('div')
++        .css('transition', 'background-image .5s')
++        .css('-webkit-transition', 'background-image .5s')
++        .css('background-image', 'url("' + marker_img + '")');
++    }
++  };
++
+ })(jQuery, _, Drupal, drupalSettings);
 diff --git a/src/Plugin/views/style/CommonMap.php b/src/Plugin/views/style/CommonMap.php
 index 893742a..2e1487f 100644
 --- a/src/Plugin/views/style/CommonMap.php
