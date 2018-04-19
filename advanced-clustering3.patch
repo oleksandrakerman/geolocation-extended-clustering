@@ -168,7 +168,7 @@ index a318c32..93c977d 100644
 +
 +                    var infoWindow = new google.maps.InfoWindow({
 +                      content: $wrapper.html(),
-+                      disableAutoPan: geolocationMap.googleMap.settings.google_map_settings.disableAutoPan
++                      disableAutoPan: geolocationMap.settings.google_map_settings.disableAutoPan
 +                    });
 +
 +                    // Revert cluster icon after popup closed.
