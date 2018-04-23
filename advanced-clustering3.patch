@@ -451,7 +451,7 @@ index 69e0be4..26d6e33 100644
 +  
  })(jQuery, _, Drupal, drupalSettings);
 diff --git a/src/Plugin/views/style/CommonMap.php b/src/Plugin/views/style/CommonMap.php
-index 893742a..c7142fe 100644
+index 893742a..f342872 100644
 --- a/src/Plugin/views/style/CommonMap.php
 +++ b/src/Plugin/views/style/CommonMap.php
 @@ -163,6 +163,7 @@ class CommonMap extends StylePluginBase {
@@ -462,18 +462,8 @@ index 893742a..c7142fe 100644
        $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['imagePath'] = $this->options['marker_clusterer_image_path'];
        if (!empty($this->options['marker_clusterer_styles'])) {
          $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['styles'] = json_decode($this->options['marker_clusterer_styles']);
-@@ -454,7 +455,9 @@ class CommonMap extends StylePluginBase {
-     $options['marker_scroll_to_result'] = ['default' => 0];
-     $options['marker_row_number'] = ['default' => FALSE];
-     $options['id_field'] = ['default' => ''];
-+    $options['snazzy'] = ['default' => FALSE];
-     $options['marker_clusterer'] = ['default' => 0];
-+    $options['marker_clusterer_advanced'] = ['default' => FALSE];
-     $options['marker_clusterer_image_path'] = ['default' => ''];
-     $options['marker_clusterer_styles'] = ['default' => []];
-     $options['dynamic_map'] = [
-@@ -543,6 +546,14 @@ class CommonMap extends StylePluginBase {
-     $map_update_target_options = $this->getMapUpdateOptions();
+@@ -170,6 +171,14 @@ class CommonMap extends StylePluginBase {
+     }
  
      /*
 +     * snazzy.
@@ -486,7 +476,17 @@ index 893742a..c7142fe 100644
 +    /*
       * Dynamic map handling.
       */
-     if (!empty($map_update_target_options['map_update_options'])) {
+     if (!empty($this->options['dynamic_map']['enabled'])) {
+@@ -454,7 +463,9 @@ class CommonMap extends StylePluginBase {
+     $options['marker_scroll_to_result'] = ['default' => 0];
+     $options['marker_row_number'] = ['default' => FALSE];
+     $options['id_field'] = ['default' => ''];
++    $options['snazzy'] = ['default' => FALSE];
+     $options['marker_clusterer'] = ['default' => 0];
++    $options['marker_clusterer_advanced'] = ['default' => FALSE];
+     $options['marker_clusterer_image_path'] = ['default' => ''];
+     $options['marker_clusterer_styles'] = ['default' => []];
+     $options['dynamic_map'] = [
 @@ -737,6 +748,13 @@ class CommonMap extends StylePluginBase {
        '#default_value' => $this->options['show_raw_locations'],
      ];
