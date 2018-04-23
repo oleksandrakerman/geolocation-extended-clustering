@@ -1,8 +1,8 @@
 diff --git a/css/geolocation-common-map.css b/css/geolocation-common-map.css
-index 01258f2..aa02f50 100644
+index 01258f2..8e843e0 100644
 --- a/css/geolocation-common-map.css
 +++ b/css/geolocation-common-map.css
-@@ -14,3 +14,20 @@
+@@ -14,3 +14,21 @@
    box-shadow: 0 2px 2px rgba(0,0,0,0.2);
    font-family: Arial, sans-serif;
  }
@@ -11,7 +11,7 @@ index 01258f2..aa02f50 100644
 +  overflow: hidden;
 +}
 +
-+ul.geolocation-info-ul {
++.geolocation-info-ul {
 +  margin-bottom: 20px;
 +  position: relative;
 +  padding: 0;
@@ -24,11 +24,52 @@ index 01258f2..aa02f50 100644
 +.geolocation-info-ul li {
 +  vertical-align: top;
 +}
+diff --git a/geolocation.info.yml b/geolocation.info.yml
+index 8a8a78a..e0995f4 100644
+--- a/geolocation.info.yml
++++ b/geolocation.info.yml
+@@ -1,4 +1,4 @@
+-core: 8.x
++# core: 8.x
+ type: module
+ name: Geolocation
+ description: 'Provides a simple geolocation field type to store and display location data (lat, lng).'
+@@ -6,3 +6,9 @@ package: Geolocation
+ dependencies:
+   - field
+ configure: geolocation.settings
++
++# Information added by Drupal.org packaging script on 2017-09-17
++version: '8.x-1.11'
++core: '8.x'
++project: 'geolocation'
++datestamp: 1505687059
+diff --git a/geolocation.libraries.yml b/geolocation.libraries.yml
+index 7aa847c..402186b 100644
+--- a/geolocation.libraries.yml
++++ b/geolocation.libraries.yml
+@@ -114,4 +114,14 @@ geolocation.google_map_form_element:
+   js:
+     js/geolocation-google-map-form-element.js: {}
+   dependencies:
+-    - geolocation/geolocation.googlemapsapi
+\ No newline at end of file
++    - geolocation/geolocation.googlemapsapi
++
++# https://github.com/atmist/snazzy-info-window
++geolocation.snazzy-info-window:
++  version: 1.x
++  js:
++    https://maps.googleapis.com/maps/api/js?key=AIzaSyBlCjQ8rqhSLz1QAxkODlkgMPn3lUPiADI: { type: external }
++    ../../../libraries/snazzy-info-window/dist/snazzy-info-window.js: {}
++  css:
++    theme:
++      ../../../libraries/snazzy-info-window/dist/snazzy-info-window.css: {}
 diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
-index a318c32..93c977d 100644
+index a318c32..72d445a 100644
 --- a/js/geolocation-common-map.js
 +++ b/js/geolocation-common-map.js
-@@ -81,6 +81,12 @@
+@@ -81,6 +81,18 @@
         */
        function (mapId, commonMapSettings) {
  
@@ -38,28 +79,27 @@ index a318c32..93c977d 100644
 +          advanced = commonMapSettings.markerClusterer.advanced;
 +        }
 +
++        // Check if advanced clustering is enabled.
++        var snazzy = false;
++        if (commonMapSettings.snazzy) {
++          snazzy = commonMapSettings.snazzy;
++        }
++
          /*
           * Hide form if requested.
           */
-@@ -347,7 +353,7 @@
-         /**
-          * Result handling.
-          */
--        // A Google Maps API tool to re-center the map on its content.
-+          // A Google Maps API tool to re-center the map on its content.
-         var bounds = new google.maps.LatLngBounds();
-         Drupal.geolocation.removeMapMarker(geolocationMap);
+@@ -370,7 +382,9 @@
+             map: geolocationMap.googleMap,
+             title: location.children('.location-title').html(),
+             infoWindowContent: location.html(),
+-            infoWindowSolitary: true
++            infoWindowSolitary: true,
++            advanced: advanced,
++            snazzy: snazzy
+           };
  
-@@ -381,6 +387,8 @@
-             markerConfig.label = location.data('markerLabel').toString();
-           }
- 
-+          markerConfig['advanced'] = advanced;
-+
-           var skipInfoWindow = false;
-           if (commonMapSettings.markerScrollToResult === true) {
-             skipInfoWindow = true;
-@@ -500,10 +508,206 @@
+           if (typeof location.data('icon') !== 'undefined') {
+@@ -500,10 +514,180 @@
              geolocationMap.googleMap,
              geolocationMap.mapMarkers,
              {
@@ -84,7 +124,7 @@ index a318c32..93c977d 100644
 +              var custom_id = markers[0].position.lat() + '|' + markers[0].position.lng();
 +
 +              result = {
-+                text: count + ' <span data-cluster-id="' + custom_id + '"><span/>',
++                text: '<span data-cluster-id="' + custom_id + '">' + count + '<span/>',
 +                index: index
 +              };
 +
@@ -107,10 +147,13 @@ index a318c32..93c977d 100644
 +              // (if markers count is >= zoom_at)
 +              // or infoWindow will be opend
 +              // (if markers count is < zoom_at).
-+              var zoom_at = 100;
++              // @todo - zoom_at should be configurable from the views ui.
++              var zoom_at = 15;
 +
 +              if (markers_count) {
-+                if (markers_count >= zoom_at) {
++                // If there are more than "zoom_at" items in cluster
++                // or if we have not reached max zoom.
++                if ((markers_count >= zoom_at) && (geolocationMap.googleMap.zoom < geolocationMap.googleMap.maxZoom)) {
 +                  geolocationMap.googleMap.fitBounds(cluster.getBounds());
 +                }
 +                else {
@@ -148,17 +191,21 @@ index a318c32..93c977d 100644
 +                      .attr('href', '#')
 +                      .appendTo($pager);
 +
++                    var page_counters = $('<span/>')
++                      .addClass('geolocation-pager-counters')
++                      .appendTo($pager);
++
 +                    $('<span/>').addClass('geolocation-pager-first')
 +                      .text('1')
-+                      .appendTo($pager);
++                      .appendTo(page_counters);
 +
 +                    $('<span/>').addClass('geolocation-pager-divider')
 +                      .text('/')
-+                      .appendTo($pager);
++                      .appendTo(page_counters);
 +
 +                    $('<span/>').addClass('geolocation-pager-total')
 +                      .text(markers_count)
-+                      .appendTo($pager);
++                      .appendTo(page_counters);
 +
 +                    $('<a/>')
 +                      .addClass('geolocation-pager-next')
@@ -166,99 +213,66 @@ index a318c32..93c977d 100644
 +                      .attr('href', '#')
 +                      .appendTo($pager);
 +
-+                    var infoWindow = new google.maps.InfoWindow({
-+                      content: $wrapper.html(),
-+                      disableAutoPan: geolocationMap.settings.google_map_settings.disableAutoPan
-+                    });
++                    var position = new google.maps.LatLng(cluster.center_.lat(), cluster.center_.lng());
++                    var autopan = geolocationMap.settings.google_map_settings.disableAutoPan;
 +
-+                    // Revert cluster icon after popup closed.
-+                    google.maps.event.addListener(infoWindow, "closeclick", function () {
-+                      Drupal.geolocation.geolocationAdjustClusterIcon(cluster);
-+                    });
++                    if (snazzy) {
++                      var infoWindow = new SnazzyInfoWindow({
++                        content: $wrapper.html(),
++                        panOnOpen: !autopan,
++                        wrapperClass: 'geolocation-info-window',
++                        map: geolocationMap.googleMap,
++                        position: position,
++                        offset: {
++                          top: '-10px'
++                        },
++                        callbacks: {
++                          beforeOpen: function(){},
++                          open: function(){},
++                          afterOpen: function(){
++                            Drupal.geolocation.adjustInside(cluster);
++                            Drupal.behaviors.oktoproMapTabs.attach();
++                          },
++                          beforeClose: function(){},
++                          close: function(){
++                            Drupal.geolocation.geolocationAdjustClusterIcon(cluster);
++                          },
++                          afterClose: function(){}
++                        }
++                      });
 +
-+                    // Info widnow position same as first item in the cluster.
-+                    infoWindow.setPosition({
-+                      lat: cluster.center_.lat(),
-+                      lng: cluster.center_.lng()
-+                    });
-+
-+                    // Close all info windows.
-+                    if (firstMarker.infoWindowSolitary) {
-+                      if (typeof geolocationMap.googleMap.infoWindow !== 'undefined') {
-+                        geolocationMap.googleMap.infoWindow.close();
++                      if (typeof geolocationMap.infoWindow !== 'undefined') {
++                        geolocationMap.infoWindow.destroy();
 +                      }
-+                      geolocationMap.googleMap.infoWindow = infoWindow;
++
++                      geolocationMap.infoWindow = infoWindow;
++
++                      infoWindow.open();
 +                    }
++                    else {
++                      infoWindow = new google.maps.InfoWindow({
++                        content: $wrapper.html(),
++                        disableAutoPan: autopan,
++                        position: position
++                      });
 +
-+                    // Open info window.
-+                    infoWindow.open(geolocationMap.googleMap);
++                      // Revert cluster icon after popup closed.
++                      google.maps.event.addListener(infoWindow, "closeclick", function () {
++                        Drupal.geolocation.geolocationAdjustClusterIcon(cluster);
++                      });
 +
-+                    // Adjust items and wrapper size.
-+                    var width = 0;
-+                    var total_width = 0;
-+                    var height = 0;
-+                    var $items = $('.geolocation-info-ul li');
-+
-+                    $items.each(function () {
-+                      var this_width = $(this).width();
-+                      var this_height = $(this).height();
-+
-+                      width = this_width > width ? this_width : width;
-+                      // Overflow-hidden wrapper width.
-+                      $('.geolocation-info-contrainer').width(width);
-+                      height = this_height > height ? this_height : height;
-+
-+                      total_width = parseFloat(total_width) + parseFloat(width);
-+                    });
-+
-+                    // Overflow-hidden wrapper width.
-+                    $('.geolocation-info-contrainer').width(width);
-+
-+                    // Pager items size.
-+                    $items.width(width).height(height)
-+                      .css('display', 'inline-block');
-+
-+                    // Ul size.
-+                    $('.geolocation-info-ul')
-+                      .width(total_width)
-+                      .height(height);
-+
-+                    // Pagination function.
-+                    var geolocationPagination = function (direction) {
-+                      var $active_item = $('li.geolocation-info-li-active');
-+                      var active = $active_item.attr('data-geolocation-index');
-+                      active = parseInt(active);
-+
-+                      var total = $('.geolocation-pager-total').text();
-+                      total = parseInt(total);
-+
-+                      if (direction == 'next' ? active < total : active > 1) {
-+                        var next = direction == 'next' ? active + 1 : active - 1;
-+
-+                        $active_item.removeClass('geolocation-info-li-active');
-+
-+                        $('li[data-geolocation-index="' + next + '"]')
-+                          .addClass('geolocation-info-li-active');
-+
-+                        $('.geolocation-pager-first').text(next);
-+
-+                        var left_skip = (next - 1) * width;
-+                        $('.geolocation-info-ul').css('left', -left_skip);
-+
-+                        // Change the cluster icon.
-+                        Drupal.geolocation.geolocationAdjustClusterIcon(cluster, next - 1);
++                      // Close all info windows.
++                      if (firstMarker.infoWindowSolitary) {
++                        if (typeof geolocationMap.googleMap.infoWindow !== 'undefined') {
++                          geolocationMap.googleMap.infoWindow.close();
++                        }
++                        geolocationMap.googleMap.infoWindow = infoWindow;
 +                      }
-+                    };
 +
-+                    $('.geolocation-pager-next').click(function (e) {
-+                      e.preventDefault();
-+                      geolocationPagination('next');
-+                    });
-+
-+                    $('.geolocation-pager-prev').click(function (e) {
-+                      e.preventDefault();
-+                      geolocationPagination('prev');
-+                    });
++                      // Open info window.
++                      infoWindow.open(geolocationMap.googleMap);
++                      Drupal.geolocation.adjustInside(cluster);
++                    }
 +                  }
 +                }
 +              }
@@ -267,36 +281,151 @@ index a318c32..93c977d 100644
          }
  
          if (mapWrapper.data('fitbounds') === 1) {
+@@ -516,6 +700,81 @@
+   }
+ 
+   /**
++   * Convert inner content of popup into pager.
++   *
++   * @param cluster
++   */
++  Drupal.geolocation.adjustInside = function (cluster) {
++    // Adjust items and wrapper size.
++    var width = 0;
++    var total_width = 0;
++    var height = 0;
++    var $items = $('.geolocation-info-ul li');
++
++    $items.each(function () {
++      var this_width = $(this).width();
++      var this_height = $(this).height();
++
++      width = this_width > width ? this_width : width;
++      // Overflow-hidden wrapper width.
++      $('.geolocation-info-contrainer').width(width);
++      height = this_height > height ? this_height : height;
++
++      total_width = parseFloat(total_width) + parseFloat(width);
++    });
++
++    // Overflow-hidden wrapper width.
++    $('.geolocation-info-contrainer').width(width);
++
++    // Pager items size.
++    $items.width(width).height(height)
++      .css('display', 'inline-block');
++
++    // Ul size.
++    $('.geolocation-info-ul')
++      .width(total_width)
++      .height(height);
++
++    // Pagination function.
++    var geolocationPagination = function (direction) {
++      var $active_item = $('li.geolocation-info-li-active');
++      var active = $active_item.attr('data-geolocation-index');
++      active = parseInt(active);
++
++      var total = $('.geolocation-pager-total').text();
++      total = parseInt(total);
++
++      if (direction == 'next' ? active < total : active > 1) {
++        var next = direction == 'next' ? active + 1 : active - 1;
++
++        $active_item.removeClass('geolocation-info-li-active');
++
++        $('li[data-geolocation-index="' + next + '"]')
++          .addClass('geolocation-info-li-active');
++
++        $('.geolocation-pager-first').text(next);
++
++        var left_skip = (next - 1) * width;
++        $('.geolocation-info-ul').css('left', -left_skip);
++
++        // Change the cluster icon.
++        Drupal.geolocation
++          .geolocationAdjustClusterIcon(cluster, next - 1);
++      }
++    };
++
++    $('.geolocation-pager-next').click(function (e) {
++      e.preventDefault();
++      geolocationPagination('next');
++    });
++
++    $('.geolocation-pager-prev').click(function (e) {
++      e.preventDefault();
++      geolocationPagination('prev');
++    });
++  };
++
++  /**
+    * Insert updated map contents into the document.
+    *
+    * ATTENTION: This is a straight ripoff from misc/ajax.js ~line 1017 insert() function.
 diff --git a/js/geolocation-google-maps-api.js b/js/geolocation-google-maps-api.js
-index 69e0be4..abbad63 100644
+index 69e0be4..4d34b06 100644
 --- a/js/geolocation-google-maps-api.js
 +++ b/js/geolocation-google-maps-api.js
-@@ -326,7 +326,7 @@
-     map.settings.google_map_settings.maxZoom = parseInt(map.settings.google_map_settings.maxZoom) || Drupal.geolocation.defaultMapSettings.maxZoom;
-     map.settings.google_map_settings.minZoom = parseInt(map.settings.google_map_settings.minZoom) || Drupal.geolocation.defaultMapSettings.minZoom;
+@@ -406,13 +406,53 @@
+       });
  
--     /**
-+    /**
-      * Create the map object and assign it to the map.
-      *
-      * @type {GoogleMap} map.googleMap
-@@ -412,7 +412,15 @@
-           }
-           map.infoWindow = currentInfoWindow;
-         }
+       currentMarker.addListener('click', function () {
+-        if (markerSettings.infoWindowSolitary) {
++        if (markerSettings.snazzy) {
++          var infoWindow = new SnazzyInfoWindow({
++            content: markerSettings.infoWindowContent,
++            panOnOpen: !map.settings.google_map_settings.disableAutoPan,
++            wrapperClass: 'geolocation-info-window',
++            map: map,
++            marker: currentMarker,
++            offset: {
++              top: '-60px'
++            },
++            callbacks: {
++              beforeOpen: function(){},
++              open: function(){},
++              afterOpen: function(){
++                Drupal.behaviors.oktoproMapTabs.attach();
++              },
++              beforeClose: function(){},
++              close: function(){},
++              afterClose: function(){}
++            }
++          });
 +
-         currentInfoWindow.open(map.googleMap, currentMarker);
+           if (typeof map.infoWindow !== 'undefined') {
+-            map.infoWindow.close();
++            map.infoWindow.destroy();
++          }
++
++          map.infoWindow = infoWindow;
++
++          infoWindow.open();
++        }
++        else {
++          if (markerSettings.infoWindowSolitary) {
++            if (typeof map.infoWindow !== 'undefined') {
++              map.infoWindow.close();
++            }
++            map.infoWindow = currentInfoWindow;
+           }
+-          map.infoWindow = currentInfoWindow;
++
++          currentInfoWindow.open(map.googleMap, currentMarker);
++        }
 +
 +        if (markerSettings.advanced && map.markerClusterer !== undefined) {
 +          // Revert to default all clusters icons before opening new one.
 +          $.each(map.markerClusterer.clusters_, function (i, v) {
 +            Drupal.geolocation.geolocationAdjustClusterIcon(v);
 +          });
-+        }
+         }
+-        currentInfoWindow.open(map.googleMap, currentMarker);
        });
  
        if (map.settings.google_map_settings.info_auto_display) {
-@@ -538,4 +546,41 @@
+@@ -538,4 +578,45 @@
      });
    };
  
@@ -315,9 +444,11 @@ index 69e0be4..abbad63 100644
 +      // infoWindow was opened.
 +      return false;
 +    }
++
 +    var custom_id = cluster.markers_[0].position.lat()
 +      + '|' + cluster.markers_[0].position.lng();
 +    var marker_img = '';
++    var color = 'transparent';
 +
 +    if (marker_id !== undefined) {
 +      marker_id = marker_id ? marker_id : 0;
@@ -325,21 +456,96 @@ index 69e0be4..abbad63 100644
 +    }
 +    else {
 +      marker_img = cluster.clusterIcon_.url_;
++      color = cluster.markerClusterer_.styles_["0"].textColor;
 +    }
 +
 +    if (marker_img) {
 +      // Set new cluster marker icon.
 +      $('span[data-cluster-id="' + custom_id + '"]')
 +        .parent().closest('div')
-+        .css('transition', 'background-image .5s')
-+        .css('-webkit-transition', 'background-image .5s')
-+        .css('background-image', 'url("' + marker_img + '")');
++        .css('transition', 'background-image .5s, color .5s')
++        .css('-webkit-transition', 'background-image .5s, color .5s')
++        .css('background-image', 'url("' + marker_img + '")')
++        .css('color', color);
 +    }
 +  };
 +
  })(jQuery, _, Drupal, drupalSettings);
+diff --git a/js/geolocation-widget-googlegeocoder.js b/js/geolocation-widget-googlegeocoder.js
+index aeb1371..c3a741c 100644
+--- a/js/geolocation-widget-googlegeocoder.js
++++ b/js/geolocation-widget-googlegeocoder.js
+@@ -374,7 +374,7 @@
+                 if (addressField.length < 1) {
+                   return;
+                 }
+-                var addressDetails = addressField.find('.details-wrapper').first();
++                var addressDetails = addressField.find("[id*='-ajax-wrapper']").first();
+                 if (addressDetails.length < 1) {
+                   return;
+                 }
+@@ -599,7 +599,7 @@
+       return;
+     }
+ 
+-    var addressDetails = addressField.find('.details-wrapper').first();
++    var addressDetails = addressField.find("[id*='-ajax-wrapper']").first();
+ 
+     var addressLine1 = '';
+     var addressLine2 = '';
+@@ -691,7 +691,7 @@
+ 
+       $(document).ajaxComplete(function (event, xhr, settings) {
+         // Update after AJAX replacement.
+-        addressDetails = addressField.find('.details-wrapper').first();
++        addressDetails = addressField.find("[id*='-ajax-wrapper']").first();
+ 
+         if (addressDetails.length < 1) {
+           return;
+diff --git a/modules/geolocation_demo/geolocation_demo.info.yml b/modules/geolocation_demo/geolocation_demo.info.yml
+index 27f1f7f..a01b24d 100644
+--- a/modules/geolocation_demo/geolocation_demo.info.yml
++++ b/modules/geolocation_demo/geolocation_demo.info.yml
+@@ -1,7 +1,7 @@
+ name: Geolocation - Demo
+ type: module
+ description: Example views and pages for some more common use cases
+-core: 8.x
++# core: 8.x
+ package: Geolocation
+ dependencies:
+   - geolocation
+@@ -10,3 +10,9 @@ dependencies:
+   - field
+   - image
+   - taxonomy
++
++# Information added by Drupal.org packaging script on 2017-09-17
++version: '8.x-1.11'
++core: '8.x'
++project: 'geolocation'
++datestamp: 1505687059
+diff --git a/modules/geolocation_google_places_api/geolocation_google_places_api.info.yml b/modules/geolocation_google_places_api/geolocation_google_places_api.info.yml
+index 401d567..fd508be 100644
+--- a/modules/geolocation_google_places_api/geolocation_google_places_api.info.yml
++++ b/modules/geolocation_google_places_api/geolocation_google_places_api.info.yml
+@@ -1,7 +1,13 @@
+ name: Geolocation - Google Places API
+ type: module
+ description: Make sure to follow the <a href="https://developers.google.com/places/web-service/policies">Places API Policies</a>.
+-core: 8.x
++# core: 8.x
+ package: Geolocation
+ dependencies:
+   - geolocation
++
++# Information added by Drupal.org packaging script on 2017-09-17
++version: '8.x-1.11'
++core: '8.x'
++project: 'geolocation'
++datestamp: 1505687059
 diff --git a/src/Plugin/views/style/CommonMap.php b/src/Plugin/views/style/CommonMap.php
-index 893742a..2e1487f 100644
+index 893742a..f342872 100644
 --- a/src/Plugin/views/style/CommonMap.php
 +++ b/src/Plugin/views/style/CommonMap.php
 @@ -163,6 +163,7 @@ class CommonMap extends StylePluginBase {
@@ -350,15 +556,46 @@ index 893742a..2e1487f 100644
        $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['imagePath'] = $this->options['marker_clusterer_image_path'];
        if (!empty($this->options['marker_clusterer_styles'])) {
          $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['markerClusterer']['styles'] = json_decode($this->options['marker_clusterer_styles']);
-@@ -455,6 +456,7 @@ class CommonMap extends StylePluginBase {
+@@ -170,6 +171,14 @@ class CommonMap extends StylePluginBase {
+     }
+ 
+     /*
++     * snazzy.
++     */
++    if (!empty($this->options['snazzy'])) {
++      $build['#attached']['library'][] = 'geolocation/geolocation.snazzy-info-window';
++      $build['#attached']['drupalSettings']['geolocation']['commonMap'][$map_id]['snazzy'] = TRUE;
++    }
++
++    /*
+      * Dynamic map handling.
+      */
+     if (!empty($this->options['dynamic_map']['enabled'])) {
+@@ -454,7 +463,9 @@ class CommonMap extends StylePluginBase {
+     $options['marker_scroll_to_result'] = ['default' => 0];
      $options['marker_row_number'] = ['default' => FALSE];
      $options['id_field'] = ['default' => ''];
++    $options['snazzy'] = ['default' => FALSE];
      $options['marker_clusterer'] = ['default' => 0];
 +    $options['marker_clusterer_advanced'] = ['default' => FALSE];
      $options['marker_clusterer_image_path'] = ['default' => ''];
      $options['marker_clusterer_styles'] = ['default' => []];
      $options['dynamic_map'] = [
-@@ -823,6 +825,17 @@ class CommonMap extends StylePluginBase {
+@@ -737,6 +748,13 @@ class CommonMap extends StylePluginBase {
+       '#default_value' => $this->options['show_raw_locations'],
+     ];
+ 
++    $form['snazzy'] = [
++      '#group' => 'style_options][advanced_settings',
++      '#title' => $this->t('Use snazzy plugin.'),
++      '#type' => 'checkbox',
++      '#default_value' => $this->options['snazzy'],
++    ];
++
+     $form['even_empty'] = [
+       '#group' => 'style_options][advanced_settings',
+       '#title' => $this->t('Display map when no locations are found'),
+@@ -823,6 +841,17 @@ class CommonMap extends StylePluginBase {
        '#description' => $this->t('Various <a href=":url">examples</a> are available.', [':url' => 'https://developers.google.com/maps/documentation/javascript/marker-clustering']),
        '#default_value' => $this->options['marker_clusterer'],
      ];
@@ -376,7 +613,7 @@ index 893742a..2e1487f 100644
      $form['marker_clusterer_image_path'] = [
        '#group' => 'style_options][marker_clusterer_settings',
        '#title' => $this->t('Cluster image path'),
-@@ -877,9 +890,10 @@ class CommonMap extends StylePluginBase {
+@@ -877,9 +906,10 @@ class CommonMap extends StylePluginBase {
        if ($json_result === NULL) {
          $form_state->setErrorByName('style_options][marker_clusterer_styles', $this->t('Decoding style JSON failed. Error: %error.', ['%error' => json_last_error()]));
        }
@@ -390,3 +627,45 @@ index 893742a..2e1487f 100644
      }
  
      $this->validateGoogleMapsSettingsForm($form, $form_state, 'style_options');
+diff --git a/tests/modules/geolocation_dummy_geocoder/geolocation_dummy_geocoder.info.yml b/tests/modules/geolocation_dummy_geocoder/geolocation_dummy_geocoder.info.yml
+index b44c80b..ff0c063 100644
+--- a/tests/modules/geolocation_dummy_geocoder/geolocation_dummy_geocoder.info.yml
++++ b/tests/modules/geolocation_dummy_geocoder/geolocation_dummy_geocoder.info.yml
+@@ -1,4 +1,4 @@
+-core: '8.x'
++# core: '8.x'
+ name: 'Geolocation Dummy Geocoder'
+ type: module
+ description: 'Test the geocoding functionality'
+@@ -6,3 +6,9 @@ package: Testing
+ dependencies:
+   - geolocation
+ hidden: true
++
++# Information added by Drupal.org packaging script on 2017-09-17
++version: '8.x-1.11'
++core: '8.x'
++project: 'geolocation'
++datestamp: 1505687059
+diff --git a/tests/modules/geolocation_test_views/geolocation_test_views.info.yml b/tests/modules/geolocation_test_views/geolocation_test_views.info.yml
+old mode 100755
+new mode 100644
+index c084437..e54a139
+--- a/tests/modules/geolocation_test_views/geolocation_test_views.info.yml
++++ b/tests/modules/geolocation_test_views/geolocation_test_views.info.yml
+@@ -1,4 +1,4 @@
+-core: '8.x'
++# core: '8.x'
+ name: 'Geolocation Views Test'
+ type: module
+ description: 'Support module for Geolocation Views tests'
+@@ -9,3 +9,9 @@ dependencies:
+   - node
+   - field
+ hidden: true
++
++# Information added by Drupal.org packaging script on 2017-09-17
++version: '8.x-1.11'
++core: '8.x'
++project: 'geolocation'
++datestamp: 1505687059
