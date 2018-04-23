@@ -25,10 +25,34 @@ index 01258f2..8e843e0 100644
 +  vertical-align: top;
 +}
 diff --git a/geolocation.libraries.yml b/geolocation.libraries.yml
-index 7aa847c..402186b 100644
+index 7aa847c..8137bf2 100644
 --- a/geolocation.libraries.yml
 +++ b/geolocation.libraries.yml
-@@ -114,4 +114,14 @@ geolocation.google_map_form_element:
+@@ -90,6 +90,7 @@ geolocation.commonmap:
+       css/geolocation-common-map.css: {}
+   js:
+     js/geolocation-common-map.js: {}
++    js/markerclusterer.js: {}
+   dependencies:
+     - core/drupal
+     - core/drupalSettings
+@@ -98,20 +99,19 @@ geolocation.commonmap:
+     - core/jquery.once
+     - geolocation/geolocation.googlemapsapi
+ 
+-# External marker clusterer.
+-geolocation.markerclusterer:
+-  remote: https://github.com/googlemaps/js-marker-clusterer
+-  version: 1.x
+-  license:
+-    name: Apache License, Version 2.0
+-    url: http://www.apache.org/licenses/LICENSE-2.0
+-    gpl-compatible: true
+-  js:
+-    https://cdn.rawgit.com/googlemaps/js-marker-clusterer/gh-pages/src/markerclusterer.js: { type: external }
+-
+ # Form element library.
+ geolocation.google_map_form_element:
    js:
      js/geolocation-google-map-form-element.js: {}
    dependencies:
@@ -46,7 +70,7 @@ index 7aa847c..402186b 100644
 +    theme:
 +      ../../../libraries/snazzy-info-window/dist/snazzy-info-window.css: {}
 diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
-index a318c32..685dbdd 100644
+index a318c32..d875f32 100644
 --- a/js/geolocation-common-map.js
 +++ b/js/geolocation-common-map.js
 @@ -81,6 +81,18 @@
@@ -68,6 +92,15 @@ index a318c32..685dbdd 100644
          /*
           * Hide form if requested.
           */
+@@ -347,7 +359,7 @@
+         /**
+          * Result handling.
+          */
+-        // A Google Maps API tool to re-center the map on its content.
++          // A Google Maps API tool to re-center the map on its content.
+         var bounds = new google.maps.LatLngBounds();
+         Drupal.geolocation.removeMapMarker(geolocationMap);
+ 
 @@ -370,7 +382,9 @@
              map: geolocationMap.googleMap,
              title: location.children('.location-title').html(),
@@ -79,11 +112,12 @@ index a318c32..685dbdd 100644
            };
  
            if (typeof location.data('icon') !== 'undefined') {
-@@ -500,10 +514,181 @@
+@@ -500,10 +514,176 @@
              geolocationMap.googleMap,
              geolocationMap.mapMarkers,
              {
 +              zoomOnClick: !advanced,
++              averageCenter: true,
                imagePath: imagePath,
 -              styles: markerClustererStyles
 +              styles: [markerClustererStyles]
@@ -113,6 +147,7 @@ index a318c32..685dbdd 100644
 +
 +            // Bind click on cluster marker.
 +            google.maps.event.addListener(geolocationMap.markerClusterer, 'clusterclick', function (cluster) {
++
 +              // Revert to default all clusters icons before opening new one.
 +              $.each(geolocationMap.markerClusterer.clusters_, function (i, v) {
 +                Drupal.geolocation.geolocationAdjustClusterIcon(v);
@@ -123,17 +158,11 @@ index a318c32..685dbdd 100644
 +
 +              var markers = cluster.markers_;
 +              var markers_count = markers.length;
-+              // After click on cluster marker map will be zoomed
-+              // (if markers count is >= zoom_at)
-+              // or infoWindow will be opend
-+              // (if markers count is < zoom_at).
-+              // @todo - zoom_at should be configurable from the views ui.
-+              var zoom_at = 15;
 +
 +              if (markers_count) {
 +                // If there are more than "zoom_at" items in cluster
 +                // or if we have not reached max zoom.
-+                if ((markers_count > zoom_at) && (geolocationMap.googleMap.zoom < geolocationMap.googleMap.maxZoom)) {
++                if (!cluster.equal && (geolocationMap.googleMap.zoom < geolocationMap.googleMap.maxZoom)) {
 +                  geolocationMap.googleMap.fitBounds(cluster.getBounds());
 +                }
 +                else {
@@ -204,7 +233,7 @@ index a318c32..685dbdd 100644
 +                        map: geolocationMap.googleMap,
 +                        position: position,
 +                        offset: {
-+                          top: '-10px'
++                          top: '-57px'
 +                        },
 +                        callbacks: {
 +                          beforeOpen: function () {},
@@ -258,11 +287,10 @@ index a318c32..685dbdd 100644
 +              }
 +            });
 +          }
-+
          }
  
          if (mapWrapper.data('fitbounds') === 1) {
-@@ -571,4 +756,79 @@
+@@ -571,4 +751,79 @@
      }
    };
  
