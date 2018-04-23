@@ -46,7 +46,7 @@ index 7aa847c..402186b 100644
 +    theme:
 +      ../../../libraries/snazzy-info-window/dist/snazzy-info-window.css: {}
 diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
-index a318c32..d25cf39 100644
+index a318c32..685dbdd 100644
 --- a/js/geolocation-common-map.js
 +++ b/js/geolocation-common-map.js
 @@ -81,6 +81,18 @@
@@ -133,7 +133,7 @@ index a318c32..d25cf39 100644
 +              if (markers_count) {
 +                // If there are more than "zoom_at" items in cluster
 +                // or if we have not reached max zoom.
-+                if ((markers_count >= zoom_at) && (geolocationMap.googleMap.zoom < geolocationMap.googleMap.maxZoom)) {
++                if ((markers_count > zoom_at) && (geolocationMap.googleMap.zoom < geolocationMap.googleMap.maxZoom)) {
 +                  geolocationMap.googleMap.fitBounds(cluster.getBounds());
 +                }
 +                else {
