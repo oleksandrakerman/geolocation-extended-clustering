@@ -70,16 +70,18 @@ index 7aa847c..8137bf2 100644
 +    theme:
 +      ../../../libraries/snazzy-info-window/dist/snazzy-info-window.css: {}
 diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
-index a318c32..d875f32 100644
+index a318c32..04587ab 100644
 --- a/js/geolocation-common-map.js
 +++ b/js/geolocation-common-map.js
-@@ -81,6 +81,18 @@
+@@ -81,6 +81,20 @@
         */
        function (mapId, commonMapSettings) {
  
 +        // Check if advanced clustering is enabled.
 +        var advanced = false;
-+        if (commonMapSettings.markerClusterer.advanced) {
++
++        if (commonMapSettings.markerClusterer !== undefined
++          && commonMapSettings.markerClusterer.advanced) {
 +          advanced = commonMapSettings.markerClusterer.advanced;
 +        }
 +
