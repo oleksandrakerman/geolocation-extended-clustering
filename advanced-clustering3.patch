@@ -480,10 +480,10 @@ index 69e0be4..26d6e33 100644
  })(jQuery, _, Drupal, drupalSettings);
 diff --git a/js/markerclusterer.js b/js/markerclusterer.js
 new file mode 100644
-index 0000000..22b3830
+index 0000000..796bf77
 --- /dev/null
 +++ b/js/markerclusterer.js
-@@ -0,0 +1,1348 @@
+@@ -0,0 +1,1354 @@
 +// ==ClosureCompiler==
 +// @compilation_level ADVANCED_OPTIMIZATIONS
 +// @externs_url https://raw.githubusercontent.com/google/closure-compiler/master/contrib/externs/maps/google_maps_api_v3.js
@@ -1597,6 +1597,11 @@ index 0000000..22b3830
 +    pos.x -= parseInt(this.width_ / 2, 10);
 +    pos.y -= parseInt(this.height_ / 2, 10);
 +  }
++
++  if (!this.cluster_.equal && (this.map.zoom < this.map.maxZoom)) {
++    pos.y = pos.y + 50;
++  }
++
 +  return pos;
 +};
 +
@@ -1608,6 +1613,7 @@ index 0000000..22b3830
 +ClusterIcon.prototype.draw = function() {
 +  if (this.visible_) {
 +    var pos = this.getPosFromLatLng_(this.center_);
++
 +    this.div_.style.top = pos.y + 'px';
 +    this.div_.style.left = pos.x + 'px';
 +  }
@@ -1832,6 +1838,7 @@ index 0000000..22b3830
 +ClusterIcon.prototype['onAdd'] = ClusterIcon.prototype.onAdd;
 +ClusterIcon.prototype['draw'] = ClusterIcon.prototype.draw;
 +ClusterIcon.prototype['onRemove'] = ClusterIcon.prototype.onRemove;
+\ No newline at end of file
 diff --git a/src/Plugin/views/style/CommonMap.php b/src/Plugin/views/style/CommonMap.php
 index 893742a..f342872 100644
 --- a/src/Plugin/views/style/CommonMap.php
