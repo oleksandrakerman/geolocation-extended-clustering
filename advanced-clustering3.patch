@@ -252,11 +252,11 @@ index a318c32..04587ab 100644
 +                        }
 +                      });
 +
-+                      if (typeof geolocationMap.infoWindow !== 'undefined') {
-+                        geolocationMap.infoWindow.destroy();
++                      if (typeof geolocationMap.infoWindowSolitary !== 'undefined') {
++                        geolocationMap.infoWindowSolitary.destroy();
 +                      }
 +
-+                      geolocationMap.infoWindow = infoWindow;
++                      geolocationMap.infoWindowSolitary = infoWindow;
 +
 +                      infoWindow.open();
 +                    }
@@ -274,10 +274,10 @@ index a318c32..04587ab 100644
 +
 +                      // Close all info windows.
 +                      if (firstMarker.infoWindowSolitary) {
-+                        if (typeof geolocationMap.googleMap.infoWindow !== 'undefined') {
-+                          geolocationMap.googleMap.infoWindow.close();
++                        if (typeof geolocationMap.googleMap.infoWindowSolitary !== 'undefined') {
++                          geolocationMap.googleMap.infoWindowSolitary.close();
 +                        }
-+                        geolocationMap.googleMap.infoWindow = infoWindow;
++                        geolocationMap.googleMap.infoWindowSolitary = infoWindow;
 +                      }
 +
 +                      // Open info window.
@@ -373,30 +373,25 @@ index a318c32..04587ab 100644
 +
  })(jQuery, window, Drupal, drupalSettings);
 diff --git a/js/geolocation-google-maps-api.js b/js/geolocation-google-maps-api.js
-index 69e0be4..c29d7d5 100644
+index 69e0be4..fef9dcc 100644
 --- a/js/geolocation-google-maps-api.js
 +++ b/js/geolocation-google-maps-api.js
-@@ -372,7 +372,14 @@
-       Drupal.geolocation.mapLoadedCallback(map, map.id);
-     });
+@@ -326,7 +326,7 @@
+     map.settings.google_map_settings.maxZoom = parseInt(map.settings.google_map_settings.maxZoom) || Drupal.geolocation.defaultMapSettings.maxZoom;
+     map.settings.google_map_settings.minZoom = parseInt(map.settings.google_map_settings.minZoom) || Drupal.geolocation.defaultMapSettings.minZoom;
  
--    return map.googleMap;
-+    map.googleMap.addListener('click', function (event) {
-+      if (event.placeId) {
-+        // Call event.stop() on the event to prevent
-+        // the default info window from showing.
-+        event.stop();
-+      }
-+
-+    });    return map.googleMap;
-   };
- 
-   /**
-@@ -406,13 +413,53 @@
+-     /**
++    /**
+      * Create the map object and assign it to the map.
+      *
+      * @type {GoogleMap} map.googleMap
+@@ -406,13 +406,53 @@
        });
  
        currentMarker.addListener('click', function () {
 -        if (markerSettings.infoWindowSolitary) {
+-          if (typeof map.infoWindow !== 'undefined') {
+-            map.infoWindow.close();
 +        if (markerSettings.snazzy) {
 +          var infoWindow = new SnazzyInfoWindow({
 +            content: markerSettings.infoWindowContent,
@@ -419,23 +414,22 @@ index 69e0be4..c29d7d5 100644
 +            }
 +          });
 +
-           if (typeof map.infoWindow !== 'undefined') {
--            map.infoWindow.close();
-+            map.infoWindow.destroy();
-           }
--          map.infoWindow = currentInfoWindow;
++          if (typeof map.infoWindowSolitary !== 'undefined') {
++            map.infoWindowSolitary.destroy();
++          }
 +
-+          map.infoWindow = infoWindow;
++          map.infoWindowSolitary = infoWindow;
 +
 +          infoWindow.open();
 +        }
 +        else {
 +          if (markerSettings.infoWindowSolitary) {
-+            if (typeof map.infoWindow !== 'undefined') {
-+              map.infoWindow.close();
++            if (typeof map.infoWindowSolitary !== 'undefined') {
++              map.infoWindowSolitary.close();
 +            }
-+            map.infoWindow = currentInfoWindow;
-+          }
++            map.infoWindowSolitary = currentInfoWindow;
+           }
+-          map.infoWindow = currentInfoWindow;
 +
 +          currentInfoWindow.open(map.googleMap, currentMarker);
 +        }
