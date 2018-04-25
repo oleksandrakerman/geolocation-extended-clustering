@@ -373,10 +373,26 @@ index a318c32..04587ab 100644
 +
  })(jQuery, window, Drupal, drupalSettings);
 diff --git a/js/geolocation-google-maps-api.js b/js/geolocation-google-maps-api.js
-index 69e0be4..26d6e33 100644
+index 69e0be4..c29d7d5 100644
 --- a/js/geolocation-google-maps-api.js
 +++ b/js/geolocation-google-maps-api.js
-@@ -406,13 +406,53 @@
+@@ -372,7 +372,14 @@
+       Drupal.geolocation.mapLoadedCallback(map, map.id);
+     });
+ 
+-    return map.googleMap;
++    map.googleMap.addListener('click', function (event) {
++      if (event.placeId) {
++        // Call event.stop() on the event to prevent
++        // the default info window from showing.
++        event.stop();
++      }
++
++    });    return map.googleMap;
+   };
+ 
+   /**
+@@ -406,13 +413,53 @@
        });
  
        currentMarker.addListener('click', function () {
