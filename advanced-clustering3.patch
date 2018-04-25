@@ -70,7 +70,7 @@ index 7aa847c..8137bf2 100644
 +    theme:
 +      ../../../libraries/snazzy-info-window/dist/snazzy-info-window.css: {}
 diff --git a/js/geolocation-common-map.js b/js/geolocation-common-map.js
-index a318c32..04587ab 100644
+index a318c32..44dfa65 100644
 --- a/js/geolocation-common-map.js
 +++ b/js/geolocation-common-map.js
 @@ -81,6 +81,20 @@
@@ -94,7 +94,7 @@ index a318c32..04587ab 100644
          /*
           * Hide form if requested.
           */
-@@ -347,7 +359,7 @@
+@@ -347,7 +361,7 @@
          /**
           * Result handling.
           */
@@ -103,7 +103,7 @@ index a318c32..04587ab 100644
          var bounds = new google.maps.LatLngBounds();
          Drupal.geolocation.removeMapMarker(geolocationMap);
  
-@@ -370,7 +382,9 @@
+@@ -370,7 +384,9 @@
              map: geolocationMap.googleMap,
              title: location.children('.location-title').html(),
              infoWindowContent: location.html(),
@@ -114,7 +114,7 @@ index a318c32..04587ab 100644
            };
  
            if (typeof location.data('icon') !== 'undefined') {
-@@ -500,10 +514,176 @@
+@@ -500,10 +516,176 @@
              geolocationMap.googleMap,
              geolocationMap.mapMarkers,
              {
@@ -252,11 +252,11 @@ index a318c32..04587ab 100644
 +                        }
 +                      });
 +
-+                      if (typeof geolocationMap.infoWindowSolitary !== 'undefined') {
-+                        geolocationMap.infoWindowSolitary.destroy();
++                      if (typeof geolocationMap.infoWindow !== 'undefined') {
++                        geolocationMap.infoWindow.destroy();
 +                      }
 +
-+                      geolocationMap.infoWindowSolitary = infoWindow;
++                      geolocationMap.infoWindow = infoWindow;
 +
 +                      infoWindow.open();
 +                    }
@@ -274,10 +274,10 @@ index a318c32..04587ab 100644
 +
 +                      // Close all info windows.
 +                      if (firstMarker.infoWindowSolitary) {
-+                        if (typeof geolocationMap.googleMap.infoWindowSolitary !== 'undefined') {
-+                          geolocationMap.googleMap.infoWindowSolitary.close();
++                        if (typeof geolocationMap.googleMap.infoWindow !== 'undefined') {
++                          geolocationMap.googleMap.infoWindow.close();
 +                        }
-+                        geolocationMap.googleMap.infoWindowSolitary = infoWindow;
++                        geolocationMap.googleMap.infoWindow = infoWindow;
 +                      }
 +
 +                      // Open info window.
@@ -292,7 +292,7 @@ index a318c32..04587ab 100644
          }
  
          if (mapWrapper.data('fitbounds') === 1) {
-@@ -571,4 +751,79 @@
+@@ -571,4 +753,79 @@
      }
    };
  
@@ -373,7 +373,7 @@ index a318c32..04587ab 100644
 +
  })(jQuery, window, Drupal, drupalSettings);
 diff --git a/js/geolocation-google-maps-api.js b/js/geolocation-google-maps-api.js
-index 69e0be4..fef9dcc 100644
+index 69e0be4..fb225c8 100644
 --- a/js/geolocation-google-maps-api.js
 +++ b/js/geolocation-google-maps-api.js
 @@ -326,7 +326,7 @@
@@ -390,8 +390,6 @@ index 69e0be4..fef9dcc 100644
  
        currentMarker.addListener('click', function () {
 -        if (markerSettings.infoWindowSolitary) {
--          if (typeof map.infoWindow !== 'undefined') {
--            map.infoWindow.close();
 +        if (markerSettings.snazzy) {
 +          var infoWindow = new SnazzyInfoWindow({
 +            content: markerSettings.infoWindowContent,
@@ -414,20 +412,21 @@ index 69e0be4..fef9dcc 100644
 +            }
 +          });
 +
-+          if (typeof map.infoWindowSolitary !== 'undefined') {
-+            map.infoWindowSolitary.destroy();
+           if (typeof map.infoWindow !== 'undefined') {
+-            map.infoWindow.close();
++            map.infoWindow.destroy();
 +          }
 +
-+          map.infoWindowSolitary = infoWindow;
++          map.infoWindow = infoWindow;
 +
 +          infoWindow.open();
 +        }
 +        else {
 +          if (markerSettings.infoWindowSolitary) {
-+            if (typeof map.infoWindowSolitary !== 'undefined') {
-+              map.infoWindowSolitary.close();
++            if (typeof map.infoWindow !== 'undefined') {
++              map.infoWindow.close();
 +            }
-+            map.infoWindowSolitary = currentInfoWindow;
++            map.infoWindow = currentInfoWindow;
            }
 -          map.infoWindow = currentInfoWindow;
 +
@@ -488,7 +487,7 @@ index 69e0be4..fef9dcc 100644
 +        .css('color', color);
 +    }
 +  };
-+  
++
  })(jQuery, _, Drupal, drupalSettings);
 diff --git a/js/markerclusterer.js b/js/markerclusterer.js
 new file mode 100644
