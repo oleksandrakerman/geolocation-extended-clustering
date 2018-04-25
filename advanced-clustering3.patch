@@ -306,7 +306,7 @@ index a318c32..04587ab 100644
 +    var width = 0;
 +    var total_width = 0;
 +    var height = 0;
-+    var $items = $('.geolocation-info-ul li');
++    var $items = $('.geolocation-info-ul li.geolocation-info-li');
 +
 +    $items.each(function () {
 +      var this_width = $(this).width();
