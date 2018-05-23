@@ -489,6 +489,22 @@ index 69e0be4..fb225c8 100644
 +  };
 +
  })(jQuery, _, Drupal, drupalSettings);
+diff --git a/js/geolocation-widget-googlegeocoder.js b/js/geolocation-widget-googlegeocoder.js
+index aeb1371..29f56a4 100644
+--- a/js/geolocation-widget-googlegeocoder.js
++++ b/js/geolocation-widget-googlegeocoder.js
+@@ -697,10 +697,7 @@
+           return;
+         }
+ 
+-        if (
+-          settings.extraData._drupal_ajax
+-          && settings.extraData._triggering_element_name === targetField + '[0][address][country_code]'
+-        ) {
++   	if (settings.extraData._drupal_ajax && (settings.extraData._triggering_element_name === targetField + '[0][address][country_code]' || settings.extraData._triggering_element_name.includes('[inline_entity_form][' + targetField + '][0][address][country_code]'))) {
+           // Populate the address fields, once they have been added to the DOM.
+           addressDetails.find('.organization').val(premise);
+           addressDetails.find('.address-line1').val(addressLine1);
 diff --git a/js/markerclusterer.js b/js/markerclusterer.js
 new file mode 100644
 index 0000000..796bf77
